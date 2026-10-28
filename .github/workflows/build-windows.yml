@@ -1,9 +1,11 @@
 
-name: Build WRAITH VST3 (Windows x64)
+name: Build WRAITH 0.5 VST3 (Windows x64)
 
 on:
   workflow_dispatch:
   push:
+    branches: [main, master]
+  pull_request:
     branches: [main, master]
 
 permissions:
@@ -11,13 +13,12 @@ permissions:
 
 jobs:
   build:
-    name: Build VST3
+    name: Build VST3 0.5
     runs-on: windows-2022
     timeout-minutes: 45
 
     steps:
-      - name: Check out source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Configure project
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
@@ -28,20 +29,18 @@ jobs:
       - name: Package VST3
         shell: pwsh
         run: |
-          $plugin = Get-ChildItem build -Recurse -Directory -Filter "WRAITH.vst3" |
+          $plugin = Get-ChildItem build -Recurse -Directory -Filter 'WRAITH.vst3' |
             Select-Object -First 1
-
           if ($null -eq $plugin) {
-            throw "WRAITH.vst3 not found. Check the build output."
+            throw "WRAITH.vst3 not found after build"
           }
-
           Compress-Archive -Path $plugin.FullName `
-            -DestinationPath "WRAITH-0.4-VST3-Windows-x64.zip" -Force
+            -DestinationPath "WRAITH-0.5-VST3-Windows-x64.zip" -Force
 
-      - name: Upload VST3 artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WRAITH-0.4-VST3-Windows-x64
-          path: WRAITH-0.4-VST3-Windows-x64.zip
+          name: WRAITH-0.5-VST3-Windows-x64
+          path: WRAITH-0.5-VST3-Windows-x64.zip
           if-no-files-found: error
           retention-days: 30
