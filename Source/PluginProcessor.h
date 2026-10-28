@@ -78,8 +78,9 @@ private:
     void releaseVoice(Voice& voice);
     void allNotesOff(bool immediate);
     void renderRange(juce::AudioBuffer<float>& buffer, int start, int count,
-                     float resonance, float decay, float motion, float gain,
-                     float grainMix, float grainSize, float grainDensity, float grainTone);
+                 float resonance, float decay, float motion, float gain,
+                 float grainMix, float grainSize, float grainDensity, float grainTone,
+                 bool reverseGrains, bool freezeTexture);
     void spawnGrain(Voice& voice, float grainSize, float grainTone, bool reverse, bool freeze);
     void createGrainSource();
     void captureInputAudio(juce::AudioBuffer<float>& buffer, bool freeze);
