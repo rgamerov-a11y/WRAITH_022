@@ -1,53 +1,40 @@
-# WRAITH VST3 — Source Edition 0.2
+# WRAITH VST3 — Hybrid Resonator + Granular Texture 0.4
 
-Original polyphonic resonator-instrument prototype for Windows 11 and Ableton Live.
-This project is inspired by broad experimental resonator and ambient-instrument ideas; it contains no Kinotone Audio code, samples, branding, or copied assets.
+Original polyphonic instrument prototype for Windows 11 and Ableton Live. WRAITH combines an inharmonic resonator voice with a real-time grain cloud built from an internally generated excitation texture. No third-party samples or copied instrument code are used.
 
-## Features in this source stage
-- JUCE 8 + CMake project; VST3 and Standalone targets
-- MIDI input and 16 voice slots
-- Event-offset rendering: note/controller events split the audio block at event sample positions
-- MIDI note-on/note-off, velocity, channel-aware note handling
-- Sustain pedal CC64, All Sound Off CC120, All Notes Off CC123
-- Original additive/inharmonic resonator-style oscillator voice
-- Resonance, Decay, Space, Motion and Output controls
-- Stereo reverb and saved parameter state
+## New in 0.4
+- Six overlapping grains per note voice, with Hann windows, randomized start positions, pitch-following playback rate, and stereo spread.
+- Four new automatable controls: **Grain Mix**, **Grain Size**, **Grain Density**, and **Grain Tone**.
+- 16-voice MIDI polyphony, event-offset note rendering, sustain pedal CC64, All Sound Off CC120 and All Notes Off CC123 retained.
+- Grain source is generated internally at prepare time; no sample files are required.
+- Fixed the pluck transient so it no longer restarts at each MIDI event/block split.
+- Expanded plugin UI for the new hybrid controls.
 
-## Not implemented yet
-- Granular buffer engine, reverse grains, shimmer pitch shifting
-- Full physical string modelling
-- MIDI pitch bend and aftertouch
-- Preset browser and factory presets
-- Automated audio/MIDI regression tests
-- Verified compiled binary or confirmed Ableton-host test
+## Controls
+- **Resonance** — emphasizes inharmonic partials.
+- **Decay** — note release duration.
+- **Space** — stereo reverb amount.
+- **Motion** — movement in the resonator stereo field and partial relationship.
+- **Grain Mix** — crossfades in the granular layer while slightly softening the resonator layer.
+- **Grain Size** — grain duration, 25–280 ms.
+- **Grain Density** — new grains per second per active voice.
+- **Grain Tone** — blends soft, filtered texture and brighter noise/partial content; also widens grain panning.
+- **Output** — master level.
 
-This is source code, not a prebuilt or certified plugin. Build and host testing remain required.
+## Build on Windows 11 x64
+Requirements: Visual Studio 2022 with **Desktop development with C++**, CMake 3.22+, Git, and internet access for the first JUCE fetch.
 
-## Requirements
-- Windows 11 x64
-- Visual Studio 2022 with "Desktop development with C++"
-- CMake 3.22 or newer
-- Git
-- Internet connection for the first configure (JUCE is fetched from its official repository)
-
-## Build
-Open "x64 Native Tools Command Prompt for VS 2022" and run these commands from this folder:
+Run `BUILD-WINDOWS.bat`, or execute in an x64 Native Tools Command Prompt for VS 2022:
 
 ```bat
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-cmake --build build --config Release --target WRAITH_VST3
+cmake --build build --config Release --target WRAITH_VST3 --parallel
 ```
 
-Look for `WRAITH.vst3` under `build\\WRAITH_artefacts\\Release\\VST3\\`.
-If JUCE did not copy it to the standard location, copy it to:
+The bundle should appear under `build\WRAITH_artefacts\Release\VST3\WRAITH.vst3`. Copy the entire `.vst3` bundle folder to `C:\Program Files\Common Files\VST3\`, then restart Ableton Live and rescan plugins.
 
-`C:\\Program Files\\Common Files\\VST3\\`
+## Automated GitHub Actions build
+The included `.github/workflows/build-windows.yml` runs on pushes to `main`/`master` and can be started manually from the repository's **Actions** tab. It uploads the artifact **WRAITH-0.4-VST3-Windows-x64** for 30 days. Upload the contents of this project folder to your repository (including the hidden `.github` folder); this package does not push changes to GitHub automatically.
 
-Restart Ableton Live. Create a MIDI track, load WRAITH as the instrument, select/arm the MIDI input and play a triad, then a 7-note chord. Test CC64 sustain and the Decay/Space controls.
-
-## Known prototype caveat
-The synthesis engine is a simple real-time oscillator model designed to establish MIDI/polyphonic architecture. It is not yet the intended final hybrid granular/resonator sound, and has not been compiled or validated in Ableton as part of this source delivery. Monitor at a low level during first tests.
-
-## Automatic Windows build via GitHub Actions
-
-See [`README-AUTOMATIC-BUILD.md`](README-AUTOMATIC-BUILD.md). The workflow at `.github/workflows/build-windows.yml` builds the Release VST3 on a Windows x64 runner and uploads a downloadable artifact named `WRAITH-VST3-Windows-x64`.
+## Important status
+This is source code plus a Windows CI build workflow, not a binary verified in this delivery. The granular layer is a procedural excitation-texture grain cloud, not a user-loaded sample-buffer/granular sampler. Reverse playback, shimmer pitch shifting, user sample import, preset browser, pitch bend/aftertouch and automated audio regression tests remain future work. A successful GitHub Actions build confirms compilation and packaging, not full host certification. Test with the master level low first.

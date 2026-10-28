@@ -3,13 +3,13 @@
 WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p)
 {
-    setSize(650, 405);
+    setSize(790, 525);
     title.setText("WRAITH", juce::dontSendNotification);
     title.setFont(juce::Font(juce::FontOptions(31.0f, juce::Font::bold)));
     title.setColour(juce::Label::textColourId, juce::Colour(0xffe1d6ff));
     addAndMakeVisible(title);
 
-    subtitle.setText("POLYPHONIC RESONANCE ENGINE  /  SOURCE 0.2", juce::dontSendNotification);
+    subtitle.setText("HYBRID RESONATOR + GRANULAR TEXTURE  /  SOURCE 0.4", juce::dontSendNotification);
     subtitle.setFont(juce::Font(juce::FontOptions(11.0f)));
     subtitle.setColour(juce::Label::textColourId, juce::Colour(0xffaaa8bd));
     addAndMakeVisible(subtitle);
@@ -18,6 +18,10 @@ WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p)
     styleSlider(decay, "Decay");
     styleSlider(space, "Space");
     styleSlider(motion, "Motion");
+    styleSlider(grainMix, "Grain Mix");
+    styleSlider(grainSize, "Grain Size (ms)");
+    styleSlider(grainDensity, "Grain Density");
+    styleSlider(grainTone, "Grain Tone");
     styleSlider(output, "Output");
 
     auto& state = processor.parameters;
@@ -25,6 +29,10 @@ WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p)
     decayAttachment = std::make_unique<Attachment>(state, "decay", decay);
     spaceAttachment = std::make_unique<Attachment>(state, "space", space);
     motionAttachment = std::make_unique<Attachment>(state, "motion", motion);
+    grainMixAttachment = std::make_unique<Attachment>(state, "grainMix", grainMix);
+    grainSizeAttachment = std::make_unique<Attachment>(state, "grainSize", grainSize);
+    grainDensityAttachment = std::make_unique<Attachment>(state, "grainDensity", grainDensity);
+    grainToneAttachment = std::make_unique<Attachment>(state, "grainTone", grainTone);
     outputAttachment = std::make_unique<Attachment>(state, "output", output);
 }
 
@@ -47,19 +55,26 @@ void WraithAudioProcessorEditor::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0xff2b2c3b));
     g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(8.0f), 12.0f, 1.0f);
     g.setColour(juce::Colour(0xff8b7bd0));
-    g.drawLine(22.0f, 76.0f, 628.0f, 76.0f, 1.0f);
+    g.drawLine(22.0f, 76.0f, 768.0f, 76.0f, 1.0f);
     g.setColour(juce::Colour(0xffaaa8bd));
     g.setFont(12.0f);
-    g.drawText("16-VOICE MIDI  •  CHORDS  •  CC64 SUSTAIN  •  STEREO SPACE",
-               24, 358, 600, 22, juce::Justification::centredLeft);
+    g.drawText("16-VOICE MIDI  •  RESONATOR + GRAIN CLOUD  •  CC64 SUSTAIN  •  STEREO SPACE",
+               24, 490, 740, 20, juce::Justification::centredLeft);
+    g.setColour(juce::Colour(0xff8b7bd0));
+    g.drawText("RESONATOR", 24, 82, 300, 16, juce::Justification::centredLeft);
+    g.drawText("GRANULAR TEXTURE", 24, 292, 300, 16, juce::Justification::centredLeft);
 }
 
 void WraithAudioProcessorEditor::resized()
 {
     title.setBounds(24, 13, 250, 42);
     subtitle.setBounds(26, 48, 420, 20);
-    const int top = 103, w = 116, h = 220, gap = 8;
-    juce::Slider* sliders[] = { &resonance, &decay, &space, &motion, &output };
+    const int w = 142, h = 178, gap = 10;
+    juce::Slider* topRow[] = { &resonance, &decay, &space, &motion, &output };
     for (int i = 0; i < 5; ++i)
-        sliders[i]->setBounds(15 + i * (w + gap), top, w, h);
+        topRow[i]->setBounds(15 + i * (w + gap), 101, w, h);
+    juce::Slider* bottomRow[] = { &grainMix, &grainSize, &grainDensity, &grainTone };
+    const int bottomW = 170, bottomGap = 18;
+    for (int i = 0; i < 4; ++i)
+        bottomRow[i]->setBounds(28 + i * (bottomW + bottomGap), 312, bottomW, 164);
 }

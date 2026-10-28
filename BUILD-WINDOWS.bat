@@ -1,24 +1,16 @@
 @echo off
 setlocal
-
-where cmake >nul 2>nul
-if errorlevel 1 (
-  echo ERROR: CMake was not found. Install CMake and Visual Studio 2022 C++ tools.
-  exit /b 1
-)
-
+echo === WRAITH 0.4 Windows x64 build ===
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
-if errorlevel 1 exit /b %errorlevel%
-
+if errorlevel 1 goto failed
 cmake --build build --config Release --target WRAITH_VST3 --parallel
-if errorlevel 1 exit /b %errorlevel%
-
+if errorlevel 1 goto failed
 echo.
-echo Build complete. Looking for WRAITH.vst3...
-if exist "build\WRAITH_artefacts\Release\VST3\WRAITH.vst3" (
-  echo Found: build\WRAITH_artefacts\Release\VST3\WRAITH.vst3
-) else (
-  echo Build finished but the expected plugin bundle path was not found.
-  echo Search the build folder for WRAITH.vst3.
-  exit /b 2
-)
+echo Build finished. Find WRAITH.vst3 in build\WRAITH_artefacts\Release\VST3
+goto end
+:failed
+echo.
+echo Build failed. Read the error messages above.
+exit /b 1
+:end
+endlocal
