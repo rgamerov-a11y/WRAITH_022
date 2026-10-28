@@ -402,8 +402,10 @@ void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& buffer, int sta
                 v.envelope += (1.0f - v.envelope) * 0.0025f;
             else if (!v.sustained)
             {
-                const float step = 1.0f / static_cast<float>(juce::jmax(1.0, currentSampleRate * decay));
-                v.envelope -= juce::jmax(step, v.releaseStep);
+                const double releaseSamples = currentSampleRate * static_cast<double>(decay);
+const float step = 1.0f / static_cast<float>(
+    releaseSamples > 1.0 ? releaseSamples : 1.0);
+v.envelope -= (step > v.releaseStep ? step : v.releaseStep);
                 if (v.envelope <= 0.00002f)
                 {
                     v.envelope = 0.0f;
