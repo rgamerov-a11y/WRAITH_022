@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include <array>
+#include <vector>
 
 class WraithAudioProcessor final : public juce::AudioProcessor
 {
@@ -39,9 +40,13 @@ private:
 
     struct Grain
     {
-        float position = 0.0f;
+        double position = 0.0;
+        double readStart = 0.0;
+        double readEnd = 0.0;
         float increment = 1.0f;
         float pan = 0.5f;
+        bool reverse = false;
+        bool capturedAudio = false;
         int age = 0;
         int length = 1;
         bool active = false;
@@ -75,8 +80,10 @@ private:
     void renderRange(juce::AudioBuffer<float>& buffer, int start, int count,
                      float resonance, float decay, float motion, float gain,
                      float grainMix, float grainSize, float grainDensity, float grainTone);
-    void spawnGrain(Voice& voice, float grainSize, float grainTone);
+    void spawnGrain(Voice& voice, float grainSize, float grainTone, bool reverse, bool freeze);
     void createGrainSource();
+    void captureInputAudio(juce::AudioBuffer<float>& buffer, bool freeze);
+    float readCaptureSample(double position, int channel) const noexcept;
 
     std::array<Voice, maxVoices> voices {};
     uint64_t voiceAgeCounter = 0;
@@ -84,6 +91,11 @@ private:
     double currentSampleRate = 44100.0;
     std::array<float, grainTableSize> grainSourceSoft {};
     std::array<float, grainTableSize> grainSourceBright {};
+    std::array<std::vector<float>, 2> captureBuffer;
+    int captureCapacity = 0;
+    uint64_t captureWriteCounter = 0;
+    uint64_t frozenEndCounter = 0;
+    bool previousFreezeState = false;
     juce::dsp::Reverb reverb;
     juce::dsp::Reverb::Parameters reverbParams;
 

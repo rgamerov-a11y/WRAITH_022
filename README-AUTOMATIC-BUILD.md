@@ -1,27 +1,28 @@
-# WRAITH — automatic Windows VST3 build
+# WRAITH 0.5 — automatic Windows VST3 build
 
-This package adds a GitHub Actions workflow to the WRAITH 0.4 source project. It builds the VST3 on a Windows x64 runner and publishes a ZIP artifact containing the `WRAITH.vst3` bundle.
+This package contains the WRAITH 0.5 source and GitHub Actions workflow. The workflow builds a Windows x64 VST3 bundle and uploads it as an artifact.
 
-## Easiest route: build in GitHub Actions
+## Build in GitHub Actions
 
-1. Sign in to GitHub and create a **new private repository** (recommended if you want to keep the project private).
-2. Extract this ZIP on your computer.
-3. Upload the **contents** of the extracted folder to the repository. Make sure `.github/workflows/build-windows.yml` is included; on Windows, enable viewing hidden files if needed.
-4. Open the repository's **Actions** tab and select **Build WRAITH 0.4 VST3 (Windows x64)**.
-5. Click **Run workflow**. The workflow fetches JUCE from its official GitHub repository, configures CMake, and builds the Release VST3.
-6. When the run completes successfully, open that run and download the artifact named **WRAITH-0.4-VST3-Windows-x64**.
-7. Extract the downloaded ZIP. It contains a `WRAITH.vst3` folder/bundle. Copy that entire folder to:
-   `C:\Program Files\Common Files\VST3\`
-8. Restart Ableton Live and rescan plug-ins if necessary.
+1. Extract this ZIP.
+2. Upload the **contents** of the extracted folder to your WRAITH repository, replacing the prior source files. Include `.github/workflows/build-windows.yml`.
+3. Commit the changes to `main` or `master`.
+4. Open **Actions** and select **Build WRAITH 0.5 VST3 (Windows x64)**. You can also use **Run workflow**.
+5. After a green successful run, open that run and download the artifact **WRAITH-0.5-VST3-Windows-x64**.
+6. Extract the artifact and copy the complete `WRAITH.vst3` bundle folder to `C:\Program Files\Common Files\VST3\`.
+7. Restart Ableton Live and test MIDI polyphony, audio input capture, Reverse Grains and Freeze Texture.
 
-The workflow also runs automatically on pushes and pull requests targeting `main` or `master`. It requires no repository secrets.
+The first configure fetches JUCE 8.0.6 from the official JUCE repository. No repository secrets are required.
 
-## Build locally instead
+## Local build
 
-Install Visual Studio 2022 with **Desktop development with C++**, CMake 3.22+, and Git. Open **x64 Native Tools Command Prompt for VS 2022** in the extracted project folder and run `BUILD-WINDOWS.bat`. The first configure needs internet access to fetch JUCE.
+Install Visual Studio 2022 with **Desktop development with C++**, CMake 3.22+, and Git. Run `BUILD-WINDOWS.bat` or execute:
 
-## Important limitations
+```bat
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Release --target WRAITH_VST3 --parallel
+```
 
-- A successful CI build confirms compilation and packaging, not a full audio-quality or Ableton-host certification. Load the plugin in Ableton and test MIDI input, chords, sustain, and parameters.
-- WRAITH 0.4 adds a procedural granular texture layer over the polyphonic resonator. Reverse grains, shimmer pitch shifting, user sample import, and a preset browser are still not implemented.
-- GitHub Actions builds Windows x64. The workflow does not sign the plugin; Windows may show a security warning for downloaded files.
+## Important
+
+A successful build is not proof of complete host certification. In particular, test whether your Ableton Live version exposes the plugin's audio input bus. Host routing for a MIDI-capable instrument with audio input may vary. Start with a low master level.

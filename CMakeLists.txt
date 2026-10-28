@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(WRAITH VERSION 0.4.0 LANGUAGES CXX)
+project(WRAITH VERSION 0.5.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -18,7 +18,7 @@ juce_add_plugin(WRAITH
     PLUGIN_CODE Wr02
     FORMATS VST3 Standalone
     PRODUCT_NAME "WRAITH"
-    DESCRIPTION "Hybrid polyphonic resonator and granular texture instrument"
+    DESCRIPTION "Polyphonic resonator with live-input granular capture, reverse grains and freeze"
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE

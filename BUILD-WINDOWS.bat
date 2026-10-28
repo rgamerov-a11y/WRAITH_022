@@ -1,6 +1,6 @@
 @echo off
 setlocal
-echo === WRAITH 0.4 Windows x64 build ===
+echo === WRAITH 0.5 Windows x64 build ===
 cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 if errorlevel 1 goto failed
 cmake --build build --config Release --target WRAITH_VST3 --parallel
