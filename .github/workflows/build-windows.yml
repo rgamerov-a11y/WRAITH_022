@@ -1,0 +1,50 @@
+name: Build WRAITH VST3 (Windows x64)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build VST3
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure project
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build VST3
+        run: cmake --build build --config Release --target WRAITH_VST3 --parallel
+
+      - name: Package VST3
+        shell: pwsh
+        run: |
+          $plugin = "build\WRAITH_artefacts\Release\VST3\WRAITH.vst3"
+          if (!(Test-Path $plugin)) {
+            $found = Get-ChildItem build -Recurse -Directory -Filter "WRAITH.vst3" |
+              Select-Object -First 1
+            if ($null -eq $found) {
+              throw "WRAITH.vst3 not found"
+            }
+            $plugin = $found.FullName
+          }
+          Compress-Archive -Path $plugin `
+            -DestinationPath "WRAITH-VST3-Windows-x64.zip" -Force
+
+      - name: Upload VST3 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WRAITH-VST3-Windows-x64
+          path: WRAITH-VST3-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 30
