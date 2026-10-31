@@ -1,52 +1,47 @@
 
-name: Build WRAITH 0.5 VST3 (Windows x64)
+name: Build WRAITH 0.6 VST3
 
 on:
   workflow_dispatch:
   push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
-
-permissions:
-  contents: read
+    branches:
+      - main
+      - master
 
 jobs:
-  build:
-    name: Build VST3 0.5
-    runs-on: windows-2022
-    timeout-minutes: 45
+  windows:
+    runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      
-- name: Package WRAITH 0.6 VST3
-  shell: pwsh
-  run: |
-    $plugins = @(Get-ChildItem -Path build -Recurse -Directory -Filter "*.vst3")
+      - name: Configure CMake
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
 
-    if ($plugins.Count -lt 2) {
-      throw "Expected 2 VST3 plugins, found $($plugins.Count)"
-    }
+      - name: Build both VST3 plugins
+        run: cmake --build build --config Release --target WRAITH_Instrument_VST3 WRAITH_FX_VST3 --parallel 4
 
-    New-Item -ItemType Directory -Path package -Force | Out-Null
+      - name: Package VST3 plugins
+        shell: pwsh
+        run: |
+          $plugins = @(Get-ChildItem -Path build -Recurse -Directory -Filter "*.vst3")
 
-    foreach ($plugin in $plugins) {
-      Copy-Item -LiteralPath $plugin.FullName -Destination package -Recurse -Force
-      Write-Host "Packaged: $($plugin.Name)"
-    }
+          if ($plugins.Count -lt 2) {
+            throw "Expected 2 VST3 plugins, found $($plugins.Count)"
+          }
 
-    Compress-Archive -Path "package/*" `
-      -DestinationPath "WRAITH-0.6-VST3-Windows-x64.zip" -Force
+          New-Item -ItemType Directory -Path package -Force | Out-Null
 
+          foreach ($plugin in $plugins) {
+            Copy-Item -LiteralPath $plugin.FullName -Destination package -Recurse -Force
+          }
 
-     
-- name: Upload WRAITH 0.6
-  uses: actions/upload-artifact@v4
-  with:
-    name: WRAITH-0.6-Windows-VST3
-    path: WRAITH-0.6-VST3-Windows-x64.zip
-    if-no-files-found: error
+          Compress-Archive -Path "package/*" -DestinationPath "WRAITH-0.6-Windows-VST3.zip" -Force
 
-          retention-days: 30
+      - name: Upload VST3 archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: WRAITH-0.6-Windows-VST3
+          path: WRAITH-0.6-Windows-VST3.zip
+          if-no-files-found: error
