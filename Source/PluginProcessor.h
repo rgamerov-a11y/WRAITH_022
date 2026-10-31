@@ -33,7 +33,7 @@ public:
 private:
     struct ModeState { float y1=0.0f, y2=0.0f; };
     struct Voice {
-        std::array<std::array<ModeState,4>,2> modes {};
+        std::array<std::array<ModeState,6>,2> modes {};
         int note=-1, channel=1;
         float targetHz=0, currentHz=0, velocity=0, envelope=0, releaseStep=.00001f;
         uint64_t age=0;
@@ -47,6 +47,9 @@ private:
     float lastPlayedHz=0.0f;
     juce::AudioBuffer<float> dryBuffer;
     juce::dsp::Reverb reverb;
+    std::array<float,2> motionPhase {{0,0}};
+    std::array<float,2> toneLP {{0,0}};
+    juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> characterSmooth;
     juce::dsp::Reverb::Parameters reverbParams;
     std::array<juce::dsp::StateVariableTPTFilter<float>,2> filter;
     juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> filterMorph;
@@ -56,6 +59,6 @@ private:
     void noteOff(int,int);
     void releaseVoice(Voice&);
     void allNotesOff(bool);
-    void renderRange(juce::AudioBuffer<float>&,int,int,float,float,float,float,float,float);
+    void renderRange(juce::AudioBuffer<float>&,int,int,float,float,float,float,float,float,float,float,float,float);
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WraithAudioProcessor)
 };

@@ -20,6 +20,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout WraithAudioProcessor::create
  p.add(std::make_unique<F>("resonance","Resonance",juce::NormalisableRange<float>(0,1,.001f),.75f));
  p.add(std::make_unique<F>("decay","Decay",juce::NormalisableRange<float>(.15f,18.0f,.01f),6.0f));
  p.add(std::make_unique<F>("space","Space",juce::NormalisableRange<float>(0,1,.001f),.42f));
+ p.add(std::make_unique<F>("position","Position",juce::NormalisableRange<float>(0,1,.001f),.38f));
+ p.add(std::make_unique<F>("tone","Tone",juce::NormalisableRange<float>(0,1,.001f),.65f));
+ p.add(std::make_unique<F>("motion","Motion",juce::NormalisableRange<float>(0,1,.001f),.32f));
+ p.add(std::make_unique<F>("time","Time",juce::NormalisableRange<float>(0,1,.001f),.55f));
+ p.add(std::make_unique<F>("root","Root (semitones)",juce::NormalisableRange<float>(-12,12,1),0.0f));
  return p;
 }
 void WraithAudioProcessor::prepareToPlay(double sr,int block) {
@@ -30,6 +35,8 @@ void WraithAudioProcessor::prepareToPlay(double sr,int block) {
  for(auto& f:filter){f.reset();f.prepare({sr,static_cast<juce::uint32>(juce::jmax(1,block)),1});f.setType(juce::dsp::StateVariableTPTFilterType::lowpass);f.setResonance(.707f);f.setCutoffFrequency(18000.0f);}
  filterMorph.reset(sr,.025);filterMorph.setCurrentAndTargetValue(.5f);
  wetSmooth.reset(sr,.02);wetSmooth.setCurrentAndTargetValue(.72f);
+ characterSmooth.reset(sr,.035);characterSmooth.setCurrentAndTargetValue(.5f);
+ motionPhase={0,0};toneLP={0,0};
  outputSmooth.reset(sr,.02);outputSmooth.setCurrentAndTargetValue(1.0f);
  for(auto& v:voices)v=Voice{};
  voiceAgeCounter=0;sustainDown=false;lastPlayedHz=0;
@@ -82,7 +89,7 @@ void WraithAudioProcessor::noteOn(int note, int channel, float velocity)
     auto& v = voices[static_cast<size_t>(juce::jmax(0, slot))];
     v = Voice {};
     v.note = note;
-    v.targetHz = midiToHz(note);
+    v.targetHz = midiToHz(juce::jlimit(0,127,note+juce::roundToInt(parameters.getRawParameterValue("root")->load())));
     v.currentHz = lastPlayedHz > 0.0f ? lastPlayedHz : v.targetHz;
     lastPlayedHz = v.targetHz;
     v.channel = channel;
@@ -138,46 +145,63 @@ void WraithAudioProcessor::allNotesOff(bool immediate)
 }
 
 
-void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& b,int start,int count,float resonance,float decay,float character,float harmonics,float damping,float glide) {
+void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& b,int start,int count,float resonance,float decay,float character,float harmonics,float damping,float glide,float position,float tone,float motion,float time) {
  const float sr=static_cast<float>(currentSampleRate);
- const float strings=juce::jlimit(0.0f,1.0f,1.0f-character*2.0f);
- const float cloud=juce::jlimit(0.0f,1.0f,character*2.0f-1.0f);
- const float metal=1.0f-strings-cloud;
  const float coeff=glide<=0?0.0f:std::exp(-1.0f/(.001f*glide*sr));
- const float feedback=std::exp(-6.907755f/(juce::jmax(.08f,decay)*sr));
- constexpr float a[4]={1,2,3,4},m[4]={1,2.41f,3.87f,5.52f},c[4]={.5f,1.003f,1.502f,2.005f};
+ constexpr float stringsRatio[6]={1,2,3,4,5,6};
+ constexpr float metalRatio[6]={1,2.41f,3.87f,5.52f,7.13f,9.31f};
+ constexpr float cloudRatio[6]={.5f,1.003f,1.502f,2.005f,2.507f,3.01f};
+ const float toneHz=350.0f*std::pow(40.0f,tone);
+ const float toneA=1.0f-std::exp(-twoPi*toneHz/sr);
+ const float spaceMotion=motion*motion;
+ characterSmooth.setTargetValue(character);
  for(int s=start;s<start+count;++s){
-   float l=0,r=0;
+   const float morph=characterSmooth.getNextValue();
+   const float strings=juce::jmax(0.0f,1.0f-2.0f*morph);
+   const float cloud=juce::jmax(0.0f,2.0f*morph-1.0f);
+   const float metal=1.0f-strings-cloud;
+   float l=0.0f,r=0.0f;
+   float excitationSamples[2]={0,0};
+   for(int ch=0;ch<b.getNumChannels();++ch){const float input=dryBuffer.getSample(ch,s);toneLP[static_cast<size_t>(ch)]+=toneA*(input-toneLP[static_cast<size_t>(ch)]);excitationSamples[ch]=toneLP[static_cast<size_t>(ch)];}
    for(auto& v:voices){if(!v.active||v.note<0)continue;
-     v.currentHz=coeff*v.currentHz+(1-coeff)*v.targetHz;
-     float ml=0,mr=0;
-     for(int k=0;k<4;++k){
-       const float ratio=strings*a[k]+metal*m[k]+cloud*c[k];
-       const float freq=v.currentHz*ratio;
-       if(freq>=sr*.45f)continue;
+     v.currentHz=coeff*v.currentHz+(1.0f-coeff)*v.targetHz;
+     float accum[2]={0,0};
+     for(int k=0;k<6;++k){
+       const float partial=static_cast<float>(k)/5.0f;
+       const float ratio=strings*stringsRatio[k]+metal*metalRatio[k]+cloud*cloudRatio[k];
+       const float drift=1.0f+(.0002f+.009f*cloud+.0015f*metal)*spaceMotion*std::sin(motionPhase[0]+k*1.47f);
+       const float freq=v.currentHz*ratio*drift;
+       if(freq>=sr*.44f||freq<12.0f)continue;
        const float omega=twoPi*freq/sr;
-       const float partialDamping=damping*(static_cast<float>(k)/3.0f);
-       const float fb=juce::jmin(.99999f,feedback*(1-partialDamping*.0025f));
-       const float weight=std::pow(.45f+.5f*harmonics,static_cast<float>(k))*(1-partialDamping*.75f);
-       for(int ch=0;ch<2;++ch){
+       const float modeDecay=juce::jmax(.09f,decay*(1.0f-.78f*damping*partial)*(1.0f+.85f*cloud+.28f*metal));
+       const float fb=juce::jmin(.999995f,std::exp(-6.907755f/(modeDecay*sr)));
+       // Excitation point controls the harmonic nodes of a virtual string/plate.
+       const float posShape=.12f+.88f*std::abs(std::sin(juce::MathConstants<float>::pi*(k+1)*(.06f+.88f*position)));
+       const float partialGain=std::pow(.42f+.56f*harmonics,static_cast<float>(k)) * posShape*(1.0f-.55f*damping*partial);
+       for(int ch=0;ch<b.getNumChannels();++ch){
          auto& st=v.modes[static_cast<size_t>(ch)][static_cast<size_t>(k)];
-         const float excitation=dryBuffer.getSample(juce::jmin(ch,dryBuffer.getNumChannels()-1),s);
-         const float next=2*fb*std::cos(omega)*st.y1-fb*fb*st.y2+excitation*(1-fb)*2;
+         const float excitation=excitationSamples[ch];
+         const float next=2.0f*fb*std::cos(omega)*st.y1-fb*fb*st.y2+excitation*(1.0f-fb)*3.5f;
          st.y2=st.y1;st.y1=next;
-         if(ch==0)ml+=next*weight;else mr+=next*weight;
+         accum[ch]+=next*partialGain;
        }
      }
-     const float gain=resonance*v.velocity*v.envelope*1.8f;
-     l+=ml*gain;r+=mr*gain;
-     if(v.keyDown)v.envelope+=(1-v.envelope)*.0025f;
+     const float characterGain=1.5f*strings+2.15f*metal+2.4f*cloud;
+     const float gain=resonance*v.velocity*v.envelope*characterGain;
+     l+=accum[0]*gain;r+=accum[b.getNumChannels()>1?1:0]*gain;
+     if(v.keyDown)v.envelope+=(1.0f-v.envelope)*.0025f;
      else if(!v.sustained){
        const float step=1.0f/juce::jmax(1.0f,decay*sr);
        v.envelope-=juce::jmax(step,v.releaseStep);
-       if(v.envelope<=.00002f){v=Voice{};}
+       if(v.envelope<=.00002f)v=Voice{};
      }
    }
-   b.setSample(0,s,l);
-   if(b.getNumChannels()>1)b.setSample(1,s,r);
+   // Soft saturation increases density without hard clipping.
+   const float drive=1.15f+.65f*metal+.5f*cloud;
+   b.setSample(0,s,std::tanh(l*drive)*.83f);
+   if(b.getNumChannels()>1)b.setSample(1,s,std::tanh(r*drive)*.83f);
+   motionPhase[0]+=twoPi*(.07f+2.4f*spaceMotion)/sr;
+   if(motionPhase[0]>twoPi)motionPhase[0]-=twoPi;
  }
 }
 void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBuffer& midi){
@@ -186,12 +210,12 @@ void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBu
  if(dryBuffer.getNumSamples()<n){jassertfalse;return;}
  for(int ch=0;ch<channels;++ch)dryBuffer.copyFrom(ch,0,b,ch,0,n);
  const auto raw=[this](const char* id){return parameters.getRawParameterValue(id)->load();};
- const float resonance=raw("resonance"),decay=raw("decay"),character=raw("character"),harmonics=raw("harmonics"),damping=raw("damping"),glide=raw("glide");
+ const float resonance=raw("resonance"),decay=raw("decay"),character=raw("character"),harmonics=raw("harmonics"),damping=raw("damping"),glide=raw("glide"),position=raw("position"),tone=raw("tone"),motion=raw("motion"),time=raw("time");
  int rendered=0;
  for(const auto meta:midi){
    const auto msg=meta.getMessage();
    const int at=juce::jlimit(rendered,n,meta.samplePosition);
-   if(at>rendered)renderRange(b,rendered,at-rendered,resonance,decay,character,harmonics,damping,glide);
+   if(at>rendered)renderRange(b,rendered,at-rendered,resonance,decay,character,harmonics,damping,glide,position,tone,motion,time);
    if(msg.isNoteOn())noteOn(msg.getNoteNumber(),msg.getChannel(),msg.getFloatVelocity());
    else if(msg.isNoteOff())noteOff(msg.getNoteNumber(),msg.getChannel());
    else if(msg.isController()){
@@ -203,10 +227,13 @@ void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBu
    }
    rendered=at;
  }
- if(rendered<n)renderRange(b,rendered,n-rendered,resonance,decay,character,harmonics,damping,glide);
+ if(rendered<n)renderRange(b,rendered,n-rendered,resonance,decay,character,harmonics,damping,glide,position,tone,motion,time);
  if(channels>1){
    juce::dsp::AudioBlock<float> block(b);juce::dsp::ProcessContextReplacing<float> ctx(block);
-   reverbParams.wetLevel=raw("space")*.65f;reverbParams.dryLevel=1.0f-raw("space")*.25f;
+   reverbParams.roomSize=juce::jlimit(.15f,.99f,.20f+.78f*time);
+   reverbParams.damping=juce::jlimit(0.0f,1.0f,.55f-.30f*tone);
+   reverbParams.width=juce::jlimit(0.0f,1.0f,.35f+.65f*raw("space"));
+   reverbParams.wetLevel=raw("space")*.65f;reverbParams.dryLevel=1.0f-raw("space")*.20f;
    reverb.setParameters(reverbParams);reverb.process(ctx);
  }
  filterMorph.setTargetValue(raw("filter"));
