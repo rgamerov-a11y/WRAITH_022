@@ -47,6 +47,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout WraithAudioProcessor::create
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.65f));
     layout.add(std::make_unique<juce::AudioParameterFloat>("resonatorMix", "Resonator Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.75f));
     layout.add(std::make_unique<juce::AudioParameterFloat>("synthMix", "Synth Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("character", "Character", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("harmonics", "Harmonics", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.65f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("damping", "Damping", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.4f));
     return layout;
 }
 
@@ -321,6 +324,12 @@ void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& buffer, int sta
     const float softWeight = 1.0f - grainTone;
     const float resonatorMix = parameters.getRawParameterValue("resonatorMix")->load();
     const float synthMix = parameters.getRawParameterValue("synthMix")->load();
+    const float character = parameters.getRawParameterValue("character")->load();
+    const float harmonics = parameters.getRawParameterValue("harmonics")->load();
+    const float damping = parameters.getRawParameterValue("damping")->load();
+    const float stringsWeight = juce::jlimit(0.0f, 1.0f, 1.0f - character * 2.0f);
+    const float cloudWeight = juce::jlimit(0.0f, 1.0f, character * 2.0f - 1.0f);
+    const float metalWeight = 1.0f - stringsWeight - cloudWeight;
     const float ringSeconds = juce::jlimit(0.08f, 12.0f, decay);
     const float feedback = std::exp(-6.907755f / (ringSeconds * static_cast<float>(currentSampleRate)));
 
@@ -414,21 +423,29 @@ void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& buffer, int sta
             // Channel state is independent; the incoming signal is the excitation.
             if (fxMode && &v != &voices[0] && resonatorMix > 0.0001f)
             {
-                constexpr float partials[4] = { 1.0f, 2.0f, 3.01f, 4.02f };
+                constexpr float stringPartials[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+                constexpr float metalPartials[4] = { 1.0f, 2.41f, 3.87f, 5.52f };
+                constexpr float cloudPartials[4] = { 0.5f, 1.003f, 1.502f, 2.005f };
                 float modalL = 0.0f, modalR = 0.0f;
                 for (int harmonic = 0; harmonic < 4; ++harmonic)
                 {
-                    const float freq = hz * partials[harmonic];
+                    const float ratio = stringsWeight * stringPartials[harmonic]
+                                      + metalWeight * metalPartials[harmonic]
+                                      + cloudWeight * cloudPartials[harmonic];
+                    const float freq = hz * ratio;
                     if (freq >= 0.45f * static_cast<float>(currentSampleRate)) continue;
                     const float omega = twoPi * freq / static_cast<float>(currentSampleRate);
-                    const float a = 2.0f * feedback * std::cos(omega);
-                    const float b = feedback * feedback;
-                    const float weight = 1.0f / static_cast<float>(harmonic + 1);
+                    const float partialDamping = damping * (static_cast<float>(harmonic) / 3.0f);
+                    const float partialFeedback = std::min(0.99999f, feedback * (1.0f - partialDamping * 0.0025f));
+                    const float a = 2.0f * partialFeedback * std::cos(omega);
+                    const float b = partialFeedback * partialFeedback;
+                    const float harmonicFalloff = std::pow(0.45f + 0.5f * harmonics, static_cast<float>(harmonic));
+                    const float weight = harmonicFalloff * (1.0f - partialDamping * 0.75f);
                     for (int ch = 0; ch < 2; ++ch)
                     {
                         auto& state = v.modes[static_cast<size_t>(ch)][static_cast<size_t>(harmonic)];
                         const float input = dryBuffer.getSample(juce::jmin(ch, dryBuffer.getNumChannels() - 1), s);
-                        const float next = a * state.y1 - b * state.y2 + input * (1.0f - feedback) * 2.0f;
+                        const float next = a * state.y1 - b * state.y2 + input * (1.0f - partialFeedback) * 2.0f;
                         state.y2 = state.y1;
                         state.y1 = next;
                         if (ch == 0) modalL += next * weight;
