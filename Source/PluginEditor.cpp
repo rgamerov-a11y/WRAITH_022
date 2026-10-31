@@ -3,13 +3,13 @@
 WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p)
 {
-    setSize(790, 815);
+    setSize(790, 955);
     title.setText("WRAITH", juce::dontSendNotification);
     title.setFont(juce::Font(juce::FontOptions(31.0f, juce::Font::bold)));
     title.setColour(juce::Label::textColourId, juce::Colour(0xffe1d6ff));
     addAndMakeVisible(title);
 
-    subtitle.setText(JucePlugin_IsSynth ? "POLYPHONIC MIDI INSTRUMENT / 0.8" : "MIDI-CONTROLLED RESONATOR FX / 0.8", juce::dontSendNotification);
+    subtitle.setText(JucePlugin_IsSynth ? "POLYPHONIC MIDI INSTRUMENT / 0.9" : "MIDI-CONTROLLED RESONATOR FX / 0.9", juce::dontSendNotification);
     subtitle.setFont(juce::Font(juce::FontOptions(11.0f)));
     subtitle.setColour(juce::Label::textColourId, juce::Colour(0xffaaa8bd));
     addAndMakeVisible(subtitle);
@@ -29,6 +29,7 @@ WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p)
     styleSlider(character, "Character");
     styleSlider(harmonics, "Harmonics");
     styleSlider(damping, "Damping");
+    styleSlider(glide, "Glide (ms)");
     resonatorMix.setVisible(! JucePlugin_IsSynth);
     synthMix.setVisible(! JucePlugin_IsSynth);
     dryWet.setVisible(! JucePlugin_IsSynth);
@@ -49,8 +50,9 @@ WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p)
     characterAttachment = std::make_unique<Attachment>(state, "character", character);
     harmonicsAttachment = std::make_unique<Attachment>(state, "harmonics", harmonics);
     dampingAttachment = std::make_unique<Attachment>(state, "damping", damping);
+    glideAttachment = std::make_unique<Attachment>(state, "glide", glide);
 
-    for (auto* button : { &reverseButton, &freezeButton })
+    for (auto* button : { &reverseButton, &freezeButton, &resonanceFreezeButton })
     {
         button->setColour(juce::ToggleButton::textColourId, juce::Colour(0xffe1d6ff));
         button->setColour(juce::ToggleButton::tickColourId, juce::Colour(0xffa58bff));
@@ -58,6 +60,7 @@ WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p)
     }
     reverseAttachment = std::make_unique<ButtonAttachment>(state, "reverse", reverseButton);
     freezeAttachment = std::make_unique<ButtonAttachment>(state, "freeze", freezeButton);
+    resonanceFreezeAttachment = std::make_unique<ButtonAttachment>(state, "resonanceFreeze", resonanceFreezeButton);
 }
 
 void WraithAudioProcessorEditor::styleSlider(juce::Slider& slider, const juce::String& name)
@@ -82,10 +85,10 @@ void WraithAudioProcessorEditor::paint(juce::Graphics& g)
     g.drawLine(22.0f, 76.0f, 768.0f, 76.0f, 1.0f);
     g.setColour(juce::Colour(0xffaaa8bd));
     g.setFont(12.0f);
-    g.drawText("MIDI-TUNED AUDIO RESONATORS  /  GRANULAR  /  HYBRID SYNTH", 24, 778, 740, 20, juce::Justification::centredLeft);
+    g.drawText("MIDI-TUNED AUDIO RESONATORS  /  GRANULAR  /  HYBRID SYNTH", 24, 919, 740, 20, juce::Justification::centredLeft);
     g.setColour(juce::Colour(0xff8b7bd0));
     g.setColour(juce::Colour(0xffded6f7));
-    for (auto* slider : { &resonance, &decay, &space, &motion, &output, &grainMix, &grainSize, &grainDensity, &grainTone, &dryWet, &resonatorMix, &synthMix, &character, &harmonics, &damping })
+    for (auto* slider : { &resonance, &decay, &space, &motion, &output, &grainMix, &grainSize, &grainDensity, &grainTone, &dryWet, &resonatorMix, &synthMix, &character, &harmonics, &damping, &glide })
         if (slider->isVisible())
             g.drawText(slider->getName(), slider->getX(), slider->getY() - 17, slider->getWidth(), 18, juce::Justification::centred);
     g.setColour(juce::Colour(0xff8b7bd0));
@@ -111,6 +114,8 @@ void WraithAudioProcessorEditor::resized()
     character.setBounds(32, 655, 180, 112);
     harmonics.setBounds(238, 655, 180, 112);
     damping.setBounds(444, 655, 180, 112);
+    glide.setBounds(32, 790, 180, 112);
+    resonanceFreezeButton.setBounds(245, 834, 200, 28);
     reverseButton.setBounds(42, 455, 170, 28);
     freezeButton.setBounds(238, 455, 170, 28);
 }

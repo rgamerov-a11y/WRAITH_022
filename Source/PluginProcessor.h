@@ -59,6 +59,9 @@ private:
         int note = -1;
         int channel = 1;
         float phase = 0.0f;
+        float currentHz = 0.0f;
+        float targetHz = 0.0f;
+        bool resonanceLatched = false;
         float phaseB = 0.0f;
         float phaseC = 0.0f;
         float envelope = 0.0f;
@@ -99,6 +102,8 @@ private:
     uint64_t captureWriteCounter = 0;
     uint64_t frozenEndCounter = 0;
     bool previousFreezeState = false;
+    bool previousResonanceFreeze = false;
+    float lastPlayedHz = 0.0f;
     juce::AudioBuffer<float> dryBuffer;
     juce::dsp::Reverb reverb;
     juce::dsp::Reverb::Parameters reverbParams;
