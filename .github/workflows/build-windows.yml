@@ -24,24 +24,25 @@ jobs:
 
       - name: Package VST3 plugins
         shell: pwsh
-        run: |
-          $plugins = @(Get-ChildItem -Path build -Recurse -Directory -Filter "*.vst3")
+        run: |$plugins = @(Get-ChildItem -Path build -Recurse -Directory -Filter "*.vst3")
 
-          if ($plugins.Count -lt 2) {
-            throw "Expected 2 VST3 plugins, found $($plugins.Count)"
-          }
+if ($plugins.Count -ne 1) {
+    throw "Expected 1 VST3 plugin, found $($plugins.Count)"
+}
 
-          New-Item -ItemType Directory -Path package -Force | Out-Null
+New-Item -ItemType Directory -Path package -Force | Out-Null
 
-          foreach ($plugin in $plugins) {
-            Copy-Item -LiteralPath $plugin.FullName -Destination package -Recurse -Force
-          }
+foreach ($plugin in $plugins) {
+    Copy-Item -LiteralPath $plugin.FullName -Destination package -Recurse -Force
+}
 
-          Compress-Archive -Path "package/*" -DestinationPath "WRAITH-0.6-Windows-VST3.zip" -Force
-
+Compress-Archive `
+    -Path "package/*" `
+    -DestinationPath "WRAITH-1.1-Windows-VST3.zip" `
+    -Force
       - name: Upload VST3 archive
         uses: actions/upload-artifact@v4
         with:
-          name: WRAITH-0.6-Windows-VST3
-          path: WRAITH-0.6-Windows-VST3.zip
+          name: WRAITH-1.1-Windows-VST3
+    path: WRAITH-1.1-Windows-VST3.zip
           if-no-files-found: error
