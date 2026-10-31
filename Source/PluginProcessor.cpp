@@ -1,109 +1,44 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include <cmath>
-
-namespace
-{
-    constexpr float twoPi = juce::MathConstants<float>::twoPi;
-    float midiToHz(int note)
-    {
-        return 440.0f * std::pow(2.0f, (static_cast<float>(note) - 69.0f) / 12.0f);
-    }
+namespace {
+constexpr float twoPi=juce::MathConstants<float>::twoPi;
+float midiToHz(int note) { return 440.0f*std::pow(2.0f,(static_cast<float>(note)-69.0f)/12.0f); }
 }
-
 WraithAudioProcessor::WraithAudioProcessor()
-    : AudioProcessor(BusesProperties()
-          .withInput("Input", juce::AudioChannelSet::stereo(), ! JucePlugin_IsSynth)
-          .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      parameters(*this, nullptr, "WRAITH_STATE", createParameterLayout())
-{
+ : AudioProcessor(BusesProperties().withInput("Input",juce::AudioChannelSet::stereo(),true).withOutput("Output",juce::AudioChannelSet::stereo(),true)),
+ parameters(*this,nullptr,"WRAITH_STATE",createParameterLayout()) {}
+juce::AudioProcessorValueTreeState::ParameterLayout WraithAudioProcessor::createParameterLayout() {
+ using F=juce::AudioParameterFloat; juce::AudioProcessorValueTreeState::ParameterLayout p;
+ p.add(std::make_unique<F>("character","Character",juce::NormalisableRange<float>(0,1,.001f),.5f));
+ p.add(std::make_unique<F>("harmonics","Harmonics",juce::NormalisableRange<float>(0,1,.001f),.65f));
+ p.add(std::make_unique<F>("damping","Damping",juce::NormalisableRange<float>(0,1,.001f),.4f));
+ p.add(std::make_unique<F>("glide","Glide (ms)",juce::NormalisableRange<float>(0,500,1),0.0f));
+ p.add(std::make_unique<F>("filter","Filter",juce::NormalisableRange<float>(0,1,.001f),.5f));
+ p.add(std::make_unique<F>("dryWet","Mix",juce::NormalisableRange<float>(0,1,.001f),.72f));
+ p.add(std::make_unique<F>("output","Output (dB)",juce::NormalisableRange<float>(-24,12,.1f),0.0f));
+ p.add(std::make_unique<F>("resonance","Resonance",juce::NormalisableRange<float>(0,1,.001f),.75f));
+ p.add(std::make_unique<F>("decay","Decay",juce::NormalisableRange<float>(.15f,18.0f,.01f),6.0f));
+ p.add(std::make_unique<F>("space","Space",juce::NormalisableRange<float>(0,1,.001f),.42f));
+ return p;
 }
-
-juce::AudioProcessorValueTreeState::ParameterLayout WraithAudioProcessor::createParameterLayout()
-{
-    using P = juce::AudioProcessorValueTreeState;
-    P::ParameterLayout layout;
-    layout.add(std::make_unique<juce::AudioParameterFloat>("resonance", "Resonance",
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.62f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("decay", "Decay",
-        juce::NormalisableRange<float>(0.15f, 18.0f, 0.01f, 0.45f), 6.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("space", "Space",
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.42f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("motion", "Motion",
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.28f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("grainMix", "Grain Mix",
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.30f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("grainSize", "Grain Size",
-        juce::NormalisableRange<float>(25.0f, 280.0f, 1.0f, 0.55f), 115.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("grainDensity", "Grain Density",
-        juce::NormalisableRange<float>(2.0f, 32.0f, 0.1f), 13.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("grainTone", "Grain Tone",
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.48f));
-    layout.add(std::make_unique<juce::AudioParameterBool>("reverse", "Reverse Grains", false));
-    layout.add(std::make_unique<juce::AudioParameterBool>("freeze", "Freeze Texture", false));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("output", "Output",
-        juce::NormalisableRange<float>(-24.0f, 12.0f, 0.1f), 0.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("dryWet", "Dry / Wet",
-        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.65f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("resonatorMix", "Resonator Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.75f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("synthMix", "Synth Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("character", "Character", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("harmonics", "Harmonics", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.65f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("damping", "Damping", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.4f));
-    layout.add(std::make_unique<juce::AudioParameterFloat>("glide", "Glide (ms)", juce::NormalisableRange<float>(0.0f, 500.0f, 1.0f), 0.0f));
-    return layout;
+void WraithAudioProcessor::prepareToPlay(double sr,int block) {
+ currentSampleRate=sr; dryBuffer.setSize(2,juce::jmax(1,block));
+ juce::dsp::ProcessSpec spec{sr,static_cast<juce::uint32>(juce::jmax(1,block)),2};
+ reverb.reset(); reverb.prepare(spec);
+ reverbParams.roomSize=.92f; reverbParams.damping=.38f; reverbParams.width=1; reverbParams.wetLevel=.3f; reverbParams.dryLevel=.8f; reverb.setParameters(reverbParams);
+ for(auto& f:filter){f.reset();f.prepare({sr,static_cast<juce::uint32>(juce::jmax(1,block)),1});f.setType(juce::dsp::StateVariableTPTFilterType::lowpass);f.setResonance(.707f);f.setCutoffFrequency(18000.0f);}
+ filterMorph.reset(sr,.025);filterMorph.setCurrentAndTargetValue(.5f);
+ wetSmooth.reset(sr,.02);wetSmooth.setCurrentAndTargetValue(.72f);
+ outputSmooth.reset(sr,.02);outputSmooth.setCurrentAndTargetValue(1.0f);
+ for(auto& v:voices)v=Voice{};
+ voiceAgeCounter=0;sustainDown=false;lastPlayedHz=0;
 }
-
-void WraithAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
-{
-    currentSampleRate = sampleRate;
-    juce::dsp::ProcessSpec spec { sampleRate, static_cast<juce::uint32>(juce::jmax(1, samplesPerBlock)),
-                                  static_cast<juce::uint32>(getTotalNumOutputChannels()) };
-    reverb.reset();
-    dryBuffer.setSize(2, juce::jmax(1, samplesPerBlock));
-    createGrainSource();
-    captureCapacity = juce::jmax(1, static_cast<int>(sampleRate * 8.0));
-    for (auto& channel : captureBuffer)
-        channel.assign(static_cast<size_t>(captureCapacity), 0.0f);
-    captureWriteCounter = 0;
-    frozenEndCounter = 0;
-    previousFreezeState = false;
-    lastPlayedHz = 0.0f;
-    reverbParams.roomSize = 0.92f;
-    reverbParams.damping = 0.38f;
-    reverbParams.wetLevel = 0.35f;
-    reverbParams.dryLevel = 0.80f;
-    reverbParams.width = 1.0f;
-    reverb.setParameters(reverbParams);
-    reverb.prepare(spec);
-
-    for (auto& voice : voices)
-        voice = Voice {};
-    sustainDown = false;
-    voiceAgeCounter = 0;
-    if (! JucePlugin_IsSynth)
-    {
-        auto& fx = voices[0];
-        fx.active = true; fx.note = 60; fx.velocity = 1.0f;
-        fx.envelope = 1.0f; fx.keyDown = true;
-    }
+void WraithAudioProcessor::releaseResources(){reverb.reset();}
+bool WraithAudioProcessor::isBusesLayoutSupported(const BusesLayout& l) const {
+ const auto in=l.getMainInputChannelSet(),out=l.getMainOutputChannelSet();
+ return in==out && (in==juce::AudioChannelSet::stereo()||in==juce::AudioChannelSet::mono());
 }
-
-void WraithAudioProcessor::releaseResources()
-{
-    reverb.reset();
-}
-
-bool WraithAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
-{
-    const auto output = layouts.getMainOutputChannelSet();
-    const auto input = layouts.getMainInputChannelSet();
-    const bool outputOK = output == juce::AudioChannelSet::stereo() || output == juce::AudioChannelSet::mono();
-    const bool inputOK = input.isDisabled() || input == juce::AudioChannelSet::stereo()
-                         || input == juce::AudioChannelSet::mono();
-    return outputOK && (JucePlugin_IsSynth ? input.isDisabled() : (input == output));
-}
-
 void WraithAudioProcessor::noteOn(int note, int channel, float velocity)
 {
     visualNote.store(note, std::memory_order_relaxed);
@@ -120,14 +55,14 @@ void WraithAudioProcessor::noteOn(int note, int channel, float velocity)
     }
 
     int slot = -1;
-    for (int i = (JucePlugin_IsSynth ? 0 : 1); i < maxVoices; ++i)
+    for (int i = 0; i < maxVoices; ++i)
         if (!voices[static_cast<size_t>(i)].active) { slot = i; break; }
 
     if (slot < 0)
     {
         // Prefer stealing the oldest released voice; otherwise steal the oldest voice.
         uint64_t oldest = UINT64_MAX;
-        for (int i = (JucePlugin_IsSynth ? 0 : 1); i < maxVoices; ++i)
+        for (int i = 0; i < maxVoices; ++i)
         {
             const auto& v = voices[static_cast<size_t>(i)];
             if (!v.keyDown && v.age < oldest) { oldest = v.age; slot = i; }
@@ -135,7 +70,7 @@ void WraithAudioProcessor::noteOn(int note, int channel, float velocity)
         if (slot < 0)
         {
             oldest = UINT64_MAX;
-            for (int i = (JucePlugin_IsSynth ? 0 : 1); i < maxVoices; ++i)
+            for (int i = 0; i < maxVoices; ++i)
                 if (voices[static_cast<size_t>(i)].age < oldest)
                 {
                     oldest = voices[static_cast<size_t>(i)].age;
@@ -153,12 +88,6 @@ void WraithAudioProcessor::noteOn(int note, int channel, float velocity)
     v.channel = channel;
     v.velocity = juce::jlimit(0.0f, 1.0f, velocity);
     v.envelope = 0.0f;
-    v.pluckEnvelope = 1.0f;
-    v.grainSpawnCountdown = 0.0;
-    v.nextGrainSlot = 0;
-    v.randomState = 0x9e3779b9u ^ (static_cast<uint32_t>(note) * 0x85ebca6bu)
-                    ^ static_cast<uint32_t>(voiceAgeCounter + 1);
-    if (v.randomState == 0) v.randomState = 0x6d2b79f5u;
     v.active = true;
     v.keyDown = true;
     v.sustained = false;
@@ -178,7 +107,7 @@ void WraithAudioProcessor::noteOff(int note, int channel)
 {
     for (auto& voice : voices)
     {
-        if ((! JucePlugin_IsSynth && &voice == &voices[0]) || !voice.active || voice.note != note || voice.channel != channel || !voice.keyDown)
+        if (!voice.active || voice.note != note || voice.channel != channel || !voice.keyDown)
             continue;
 
         voice.keyDown = false;
@@ -194,7 +123,7 @@ void WraithAudioProcessor::allNotesOff(bool immediate)
     sustainDown = false;
     for (auto& voice : voices)
     {
-        if ((! JucePlugin_IsSynth && &voice == &voices[0]) || !voice.active) continue;
+        if (!voice.active) continue;
         voice.keyDown = false;
         voice.sustained = false;
         if (immediate)
@@ -208,404 +137,106 @@ void WraithAudioProcessor::allNotesOff(bool immediate)
     }
 }
 
-void WraithAudioProcessor::createGrainSource()
-{
-    // A deterministic, internally generated excitation texture; no external samples.
-    juce::Random random(0x57415254);
-    float low = 0.0f;
-    for (int i = 0; i < grainTableSize; ++i)
-    {
-        const float white = random.nextFloat() * 2.0f - 1.0f;
-        low += (white - low) * 0.075f;
-        const float cycle = static_cast<float>(i) / static_cast<float>(grainTableSize);
-        const float pitched = 0.30f * std::sin(twoPi * cycle * 17.0f)
-                            + 0.18f * std::sin(twoPi * cycle * 43.0f + 0.7f)
-                            + 0.10f * std::sin(twoPi * cycle * 91.0f + 1.9f);
-        grainSourceSoft[static_cast<size_t>(i)] = juce::jlimit(-1.0f, 1.0f, low * 0.85f + pitched);
-        grainSourceBright[static_cast<size_t>(i)] = juce::jlimit(-1.0f, 1.0f, white * 0.72f + pitched * 0.75f);
-    }
+
+void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& b,int start,int count,float resonance,float decay,float character,float harmonics,float damping,float glide) {
+ const float sr=static_cast<float>(currentSampleRate);
+ const float strings=juce::jlimit(0.0f,1.0f,1.0f-character*2.0f);
+ const float cloud=juce::jlimit(0.0f,1.0f,character*2.0f-1.0f);
+ const float metal=1.0f-strings-cloud;
+ const float coeff=glide<=0?0.0f:std::exp(-1.0f/(.001f*glide*sr));
+ const float feedback=std::exp(-6.907755f/(juce::jmax(.08f,decay)*sr));
+ constexpr float a[4]={1,2,3,4},m[4]={1,2.41f,3.87f,5.52f},c[4]={.5f,1.003f,1.502f,2.005f};
+ for(int s=start;s<start+count;++s){
+   float l=0,r=0;
+   for(auto& v:voices){if(!v.active||v.note<0)continue;
+     v.currentHz=coeff*v.currentHz+(1-coeff)*v.targetHz;
+     float ml=0,mr=0;
+     for(int k=0;k<4;++k){
+       const float ratio=strings*a[k]+metal*m[k]+cloud*c[k];
+       const float freq=v.currentHz*ratio;
+       if(freq>=sr*.45f)continue;
+       const float omega=twoPi*freq/sr;
+       const float partialDamping=damping*(static_cast<float>(k)/3.0f);
+       const float fb=juce::jmin(.99999f,feedback*(1-partialDamping*.0025f));
+       const float weight=std::pow(.45f+.5f*harmonics,static_cast<float>(k))*(1-partialDamping*.75f);
+       for(int ch=0;ch<2;++ch){
+         auto& st=v.modes[static_cast<size_t>(ch)][static_cast<size_t>(k)];
+         const float excitation=dryBuffer.getSample(juce::jmin(ch,dryBuffer.getNumChannels()-1),s);
+         const float next=2*fb*std::cos(omega)*st.y1-fb*fb*st.y2+excitation*(1-fb)*2;
+         st.y2=st.y1;st.y1=next;
+         if(ch==0)ml+=next*weight;else mr+=next*weight;
+       }
+     }
+     const float gain=resonance*v.velocity*v.envelope*1.8f;
+     l+=ml*gain;r+=mr*gain;
+     if(v.keyDown)v.envelope+=(1-v.envelope)*.0025f;
+     else if(!v.sustained){
+       const float step=1.0f/juce::jmax(1.0f,decay*sr);
+       v.envelope-=juce::jmax(step,v.releaseStep);
+       if(v.envelope<=.00002f){v=Voice{};}
+     }
+   }
+   b.setSample(0,s,l);
+   if(b.getNumChannels()>1)b.setSample(1,s,r);
+ }
 }
-
-void WraithAudioProcessor::captureInputAudio(juce::AudioBuffer<float>& buffer, bool freeze)
-{
-    if (freeze && !previousFreezeState)
-        frozenEndCounter = captureWriteCounter;
-    previousFreezeState = freeze;
-    if (freeze || captureCapacity <= 0)
-        return;
-
-    // Copy the incoming audio before the instrument clears its output buffer.
-    // The ring is preallocated in prepareToPlay; no allocation or locking occurs here.
-    const int channels = buffer.getNumChannels();
-    const int samples = buffer.getNumSamples();
-    const float* inL = channels > 0 ? buffer.getReadPointer(0) : nullptr;
-    const float* inR = channels > 1 ? buffer.getReadPointer(1) : inL;
-    auto& ringL = captureBuffer[0];
-    auto& ringR = captureBuffer[1];
-    for (int i = 0; i < samples; ++i)
-    {
-        const auto index = static_cast<size_t>(captureWriteCounter % static_cast<uint64_t>(captureCapacity));
-        const float left = inL != nullptr ? inL[i] : 0.0f;
-        const float right = inR != nullptr ? inR[i] : left;
-        ringL[index] = left;
-        ringR[index] = right;
-        ++captureWriteCounter;
-    }
+void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBuffer& midi){
+ juce::ScopedNoDenormals noDenormals;
+ const int n=b.getNumSamples(),channels=b.getNumChannels();
+ if(dryBuffer.getNumSamples()<n){jassertfalse;return;}
+ for(int ch=0;ch<channels;++ch)dryBuffer.copyFrom(ch,0,b,ch,0,n);
+ const auto raw=[this](const char* id){return parameters.getRawParameterValue(id)->load();};
+ const float resonance=raw("resonance"),decay=raw("decay"),character=raw("character"),harmonics=raw("harmonics"),damping=raw("damping"),glide=raw("glide");
+ int rendered=0;
+ for(const auto meta:midi){
+   const auto msg=meta.getMessage();
+   const int at=juce::jlimit(rendered,n,meta.samplePosition);
+   if(at>rendered)renderRange(b,rendered,at-rendered,resonance,decay,character,harmonics,damping,glide);
+   if(msg.isNoteOn())noteOn(msg.getNoteNumber(),msg.getChannel(),msg.getFloatVelocity());
+   else if(msg.isNoteOff())noteOff(msg.getNoteNumber(),msg.getChannel());
+   else if(msg.isController()){
+     if(msg.getControllerNumber()==64){const bool down=msg.getControllerValue()>=64;
+       if(sustainDown&&!down)for(auto& v:voices)if(v.active&&v.sustained&&!v.keyDown)releaseVoice(v);
+       sustainDown=down;
+     }else if(msg.getControllerNumber()==120)allNotesOff(true);
+     else if(msg.getControllerNumber()==123)allNotesOff(false);
+   }
+   rendered=at;
+ }
+ if(rendered<n)renderRange(b,rendered,n-rendered,resonance,decay,character,harmonics,damping,glide);
+ if(channels>1){
+   juce::dsp::AudioBlock<float> block(b);juce::dsp::ProcessContextReplacing<float> ctx(block);
+   reverbParams.wetLevel=raw("space")*.65f;reverbParams.dryLevel=1.0f-raw("space")*.25f;
+   reverb.setParameters(reverbParams);reverb.process(ctx);
+ }
+ filterMorph.setTargetValue(raw("filter"));
+ wetSmooth.setTargetValue(raw("dryWet"));
+ outputSmooth.setTargetValue(juce::Decibels::decibelsToGain(raw("output")));
+ float peak=0;
+ for(int s=0;s<n;++s){
+   const float f=filterMorph.getNextValue();
+   const bool low=f<.5f;
+   const float depth=std::abs(f-.5f)*2;
+   const float cutoff=low?18000.0f*std::pow(40.0f,-depth):20.0f*std::pow(40.0f,depth);
+   const float mix=wetSmooth.getNextValue(),gain=outputSmooth.getNextValue();
+   for(int ch=0;ch<channels;++ch){
+     auto& svf=filter[static_cast<size_t>(juce::jmin(ch,1))];
+     svf.setType(low?juce::dsp::StateVariableTPTFilterType::lowpass:juce::dsp::StateVariableTPTFilterType::highpass);
+     svf.setCutoffFrequency(cutoff);
+     const float wet=b.getSample(ch,s);
+     const float shaped=wet*(1-depth)+svf.processSample(0,wet)*depth;
+     const float out=(shaped*mix+dryBuffer.getSample(ch,s)*(1-mix))*gain;
+     b.setSample(ch,s,out);peak=juce::jmax(peak,std::abs(out));
+   }
+ }
+ visualLevel.store(peak,std::memory_order_relaxed);
 }
-
-float WraithAudioProcessor::readCaptureSample(double position, int channel) const noexcept
-{
-    if (captureCapacity <= 0)
-        return 0.0f;
-    const auto absoluteIndex = static_cast<int64_t>(std::floor(position));
-    int64_t wrapped = absoluteIndex % static_cast<int64_t>(captureCapacity);
-    if (wrapped < 0)
-        wrapped += captureCapacity;
-    const auto& ring = captureBuffer[static_cast<size_t>(juce::jlimit(0, 1, channel))];
-    const int index0 = static_cast<int>(wrapped);
-    const int index1 = (index0 + 1) % captureCapacity;
-    const float frac = static_cast<float>(position - std::floor(position));
-    return ring[static_cast<size_t>(index0)] * (1.0f - frac)
-         + ring[static_cast<size_t>(index1)] * frac;
+void WraithAudioProcessor::getStateInformation(juce::MemoryBlock& data){
+ auto state=parameters.copyState();std::unique_ptr<juce::XmlElement> xml(state.createXml());copyXmlToBinary(*xml,data);
 }
-
-void WraithAudioProcessor::spawnGrain(Voice& voice, float grainSize, float grainTone,
-                                      bool reverse, bool freeze)
-{
-    auto& grain = voice.grains[static_cast<size_t>(voice.nextGrainSlot)];
-    voice.nextGrainSlot = (voice.nextGrainSlot + 1) % grainsPerVoice;
-
-    auto nextRandom = [&voice]()
-    {
-        uint32_t x = voice.randomState;
-        x ^= x << 13;
-        x ^= x >> 17;
-        x ^= x << 5;
-        voice.randomState = x;
-        return static_cast<float>(x & 0x00ffffffu) / 16777215.0f;
-    };
-
-    const float noteRate = std::pow(2.0f, (static_cast<float>(voice.note) - 60.0f) / 12.0f);
-    const float jitter = 0.82f + nextRandom() * 0.36f;
-    grain.increment = juce::jlimit(0.25f, 4.0f, noteRate * jitter);
-    grain.pan = juce::jlimit(0.0f, 1.0f, 0.5f + (nextRandom() - 0.5f) * (0.25f + grainTone * 0.7f));
-    grain.age = 0;
-    grain.length = juce::jmax(16, static_cast<int>(currentSampleRate * (grainSize / 1000.0f)));
-    grain.reverse = reverse;
-
-    // Use up to four seconds of captured input. Freeze pins the read window to
-    // the capture head at the instant Freeze was enabled.
-    const uint64_t endCounter = freeze ? frozenEndCounter : captureWriteCounter;
-    const uint64_t windowSamples = static_cast<uint64_t>(juce::jmax(1.0, currentSampleRate * 4.0));
-    const uint64_t startCounter = endCounter > windowSamples ? endCounter - windowSamples : 0;
-    const uint64_t available = endCounter > startCounter ? endCounter - startCounter : 0;
-    const bool haveCapture = available > static_cast<uint64_t>(grain.length + 8)
-                             && captureCapacity > 0;
-    grain.capturedAudio = haveCapture;
-    if (! JucePlugin_IsSynth && ! haveCapture) { grain.active = false; return; }
-
-    if (haveCapture)
-    {
-        grain.readStart = static_cast<double>(startCounter);
-        grain.readEnd = static_cast<double>(endCounter);
-        grain.position = grain.readStart + nextRandom() * juce::jmax(1.0, grain.readEnd - grain.readStart - 1.0);
-    }
-    else
-    {
-        // Safe fallback before any usable input has been captured.
-        grain.readStart = 0.0;
-        grain.readEnd = static_cast<double>(grainTableSize);
-        grain.position = nextRandom() * static_cast<double>(grainTableSize);
-    }
-    grain.active = true;
+void WraithAudioProcessor::setStateInformation(const void* data,int bytes){
+ std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data,bytes));
+ if(xml&&xml->hasTagName(parameters.state.getType()))parameters.replaceState(juce::ValueTree::fromXml(*xml));
 }
-
-void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& buffer, int start, int count,
-                                       float resonance, float decay, float motion, float gain,
-                                       float grainMix, float grainSize, float grainDensity, float grainTone,
-                                       bool reverseGrains, bool freezeTexture, bool fxMode)
-{
-    const int channels = buffer.getNumChannels();
-    auto* left = buffer.getWritePointer(0);
-    auto* right = channels > 1 ? buffer.getWritePointer(1) : nullptr;
-    const double grainInterval = currentSampleRate / static_cast<double>(juce::jmax(0.1f, grainDensity));
-    const float softWeight = 1.0f - grainTone;
-    const float resonatorMix = parameters.getRawParameterValue("resonatorMix")->load();
-    const float synthMix = parameters.getRawParameterValue("synthMix")->load();
-    const float character = parameters.getRawParameterValue("character")->load();
-    const float harmonics = parameters.getRawParameterValue("harmonics")->load();
-    const float damping = parameters.getRawParameterValue("damping")->load();
-    const float glideMs = parameters.getRawParameterValue("glide")->load();
-    const float glideCoefficient = glideMs <= 0.0f ? 0.0f : std::exp(-1.0f / (0.001f * glideMs * static_cast<float>(currentSampleRate)));
-    const float stringsWeight = juce::jlimit(0.0f, 1.0f, 1.0f - character * 2.0f);
-    const float cloudWeight = juce::jlimit(0.0f, 1.0f, character * 2.0f - 1.0f);
-    const float metalWeight = 1.0f - stringsWeight - cloudWeight;
-    const float ringSeconds = juce::jlimit(0.08f, 12.0f, decay);
-    const float feedback = std::exp(-6.907755f / (ringSeconds * static_cast<float>(currentSampleRate)));
-
-    for (int s = start; s < start + count; ++s)
-    {
-        float l = 0.0f;
-        float r = 0.0f;
-
-        for (auto& v : voices)
-        {
-            if (!v.active || v.note < 0) continue;
-
-            v.currentHz = glideCoefficient * v.currentHz + (1.0f - glideCoefficient) * v.targetHz;
-            const float hz = v.currentHz;
-            const float increment = hz / static_cast<float>(currentSampleRate);
-            v.phase += increment;
-            v.phaseB += increment * (2.006f + motion * 0.018f);
-            v.phaseC += increment * 3.997f;
-            if (v.phase >= 1.0f) v.phase -= std::floor(v.phase);
-            if (v.phaseB >= 1.0f) v.phaseB -= std::floor(v.phaseB);
-            if (v.phaseC >= 1.0f) v.phaseC -= std::floor(v.phaseC);
-
-            const float body = std::sin(twoPi * v.phase);
-            const float metallic = std::sin(twoPi * v.phaseB);
-            const float upper = std::sin(twoPi * v.phaseC);
-            // The pluck transient is voice state, not block state: MIDI event splits
-            // can no longer restart the attack transient mid-note.
-            const float pluck = v.pluckEnvelope;
-            v.pluckEnvelope *= std::exp(-1.0f / static_cast<float>(juce::jmax(1.0, currentSampleRate * 0.025)));
-            const float resonant = (body * (0.62f - resonance * 0.12f)
-                                  + metallic * (0.12f + resonance * 0.32f)
-                                  + upper * (0.06f + resonance * 0.18f)
-                                  + pluck * 0.08f) * v.envelope * v.velocity;
-            const float pan = 0.5f + 0.42f * std::sin(twoPi * v.phase * (0.07f + motion * 0.18f));
-            float grainLeft = 0.0f;
-            float grainRight = 0.0f;
-
-            if (grainMix > 0.0001f && v.envelope > 0.0001f)
-            {
-                v.grainSpawnCountdown -= 1.0;
-                if (v.grainSpawnCountdown <= 0.0)
-                {
-                    spawnGrain(v, grainSize, grainTone, reverseGrains, freezeTexture);
-                    v.grainSpawnCountdown += grainInterval;
-                }
-
-                for (auto& grain : v.grains)
-                {
-                    if (!grain.active) continue;
-                    const float norm = static_cast<float>(grain.age) / static_cast<float>(grain.length);
-                    if (norm >= 1.0f)
-                    {
-                        grain.active = false;
-                        continue;
-                    }
-                    float sourceSample = 0.0f;
-                    if (grain.capturedAudio)
-                    {
-                        sourceSample = 0.5f * (readCaptureSample(grain.position, 0)
-                                             + readCaptureSample(grain.position, 1));
-                        grain.position += grain.reverse ? -static_cast<double>(grain.increment)
-                                                        : static_cast<double>(grain.increment);
-                        if (grain.position >= grain.readEnd)
-                            grain.position = grain.readStart;
-                        else if (grain.position < grain.readStart)
-                            grain.position = grain.readEnd - 1.0;
-                    }
-                    else
-                    {
-                        const int index0 = static_cast<int>(grain.position) & (grainTableSize - 1);
-                        const int index1 = (index0 + 1) & (grainTableSize - 1);
-                        const float frac = static_cast<float>(grain.position - std::floor(grain.position));
-                        const float soft = grainSourceSoft[static_cast<size_t>(index0)] * (1.0f - frac)
-                                         + grainSourceSoft[static_cast<size_t>(index1)] * frac;
-                        const float bright = grainSourceBright[static_cast<size_t>(index0)] * (1.0f - frac)
-                                           + grainSourceBright[static_cast<size_t>(index1)] * frac;
-                        sourceSample = soft * softWeight + bright * grainTone;
-                        grain.position += grain.reverse ? -static_cast<double>(grain.increment)
-                                                        : static_cast<double>(grain.increment);
-                        while (grain.position >= static_cast<double>(grainTableSize)) grain.position -= static_cast<double>(grainTableSize);
-                        while (grain.position < 0.0) grain.position += static_cast<double>(grainTableSize);
-                    }
-                    const float window = 0.5f - 0.5f * std::cos(twoPi * norm);
-                    const float sample = sourceSample * window;
-                    grainLeft += sample * std::sqrt(1.0f - grain.pan);
-                    grainRight += sample * std::sqrt(grain.pan);
-                    ++grain.age;
-                }
-            }
-
-            // Audio-excited modal resonators. Each MIDI voice has 4 tuned partials.
-            // Channel state is independent; the incoming signal is the excitation.
-            if (fxMode && &v != &voices[0] && resonatorMix > 0.0001f)
-            {
-                constexpr float stringPartials[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
-                constexpr float metalPartials[4] = { 1.0f, 2.41f, 3.87f, 5.52f };
-                constexpr float cloudPartials[4] = { 0.5f, 1.003f, 1.502f, 2.005f };
-                float modalL = 0.0f, modalR = 0.0f;
-                for (int harmonic = 0; harmonic < 4; ++harmonic)
-                {
-                    const float ratio = stringsWeight * stringPartials[harmonic]
-                                      + metalWeight * metalPartials[harmonic]
-                                      + cloudWeight * cloudPartials[harmonic];
-                    const float freq = hz * ratio;
-                    if (freq >= 0.45f * static_cast<float>(currentSampleRate)) continue;
-                    const float omega = twoPi * freq / static_cast<float>(currentSampleRate);
-                    const float partialDamping = damping * (static_cast<float>(harmonic) / 3.0f);
-                    const float partialFeedback = std::min(0.99999f, feedback * (1.0f - partialDamping * 0.0025f));
-                                        const float harmonicFalloff = std::pow(0.45f + 0.5f * harmonics, static_cast<float>(harmonic));
-                    const float weight = harmonicFalloff * (1.0f - partialDamping * 0.75f);
-                    for (int ch = 0; ch < 2; ++ch)
-                    {
-                        auto& state = v.modes[static_cast<size_t>(ch)][static_cast<size_t>(harmonic)];
-                        const float input = dryBuffer.getSample(juce::jmin(ch, dryBuffer.getNumChannels() - 1), s);
-                        const float excitation = input;
-                        const float modeFeedback = partialFeedback;
-                        const float modeA = 2.0f * modeFeedback * std::cos(omega);
-                        const float modeB = modeFeedback * modeFeedback;
-                        const float next = modeA * state.y1 - modeB * state.y2 + excitation * (1.0f - partialFeedback) * 2.0f;
-                        state.y2 = state.y1;
-                        state.y1 = next;
-                        if (ch == 0) modalL += next * weight;
-                        else modalR += next * weight;
-                    }
-                }
-                const float modalGain = resonatorMix * resonance * v.velocity * v.envelope * 1.8f;
-                l += modalL * modalGain;
-                r += modalR * modalGain;
-            }
-            const float grainLevel = grainMix * (fxMode ? 0.75f : 0.30f) * v.envelope * v.velocity;
-            l += (fxMode ? (&v == &voices[0] ? 0.0f : resonant * synthMix) : resonant) * std::sqrt(1.0f - pan) * (1.0f - grainMix * 0.35f) + grainLeft * grainLevel;
-            r += (fxMode ? (&v == &voices[0] ? 0.0f : resonant * synthMix) : resonant) * std::sqrt(pan) * (1.0f - grainMix * 0.35f) + grainRight * grainLevel;
-
-            if (v.keyDown)
-                v.envelope += (1.0f - v.envelope) * 0.0025f;
-            else if (!v.sustained)
-            {
-                const double releaseSamples = currentSampleRate * static_cast<double>(decay);
-const float step = 1.0f / static_cast<float>(
-    releaseSamples > 1.0 ? releaseSamples : 1.0);
-v.envelope -= (step > v.releaseStep ? step : v.releaseStep);
-                if (v.envelope <= 0.00002f)
-                {
-                    v.envelope = 0.0f;
-                    v.active = false;
-                    v.note = -1;
-                    for (auto& grain : v.grains) grain.active = false;
-                }
-            }
-        }
-
-        left[s] += l * gain;
-        if (right != nullptr) right[s] += r * gain;
-    }
-}
-
-void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
-{
-    juce::ScopedNoDenormals noDenormals;
-    const bool freezeTexture = parameters.getRawParameterValue("freeze")->load() >= 0.5f;
-    const bool fxMode = ! JucePlugin_IsSynth;
-    const int n = buffer.getNumSamples();
-    if (fxMode)
-    {
-        jassert(dryBuffer.getNumSamples() >= n);
-        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
-            dryBuffer.copyFrom(ch, 0, buffer, ch, 0, n);
-    }
-    if (fxMode) captureInputAudio(buffer, freezeTexture);
-    buffer.clear();
-
-    const bool reverseGrains = parameters.getRawParameterValue("reverse")->load() >= 0.5f;
-    const float resonance = parameters.getRawParameterValue("resonance")->load();
-    const float decay = parameters.getRawParameterValue("decay")->load();
-    const float space = parameters.getRawParameterValue("space")->load();
-    const float motion = parameters.getRawParameterValue("motion")->load();
-    const float grainMix = parameters.getRawParameterValue("grainMix")->load();
-    const float grainSize = parameters.getRawParameterValue("grainSize")->load();
-    const float grainDensity = parameters.getRawParameterValue("grainDensity")->load();
-    const float grainTone = parameters.getRawParameterValue("grainTone")->load();
-    const float dryWet = parameters.getRawParameterValue("dryWet")->load();
-    const float gain = juce::Decibels::decibelsToGain(parameters.getRawParameterValue("output")->load());
-
-    int renderedUntil = 0;
-    for (const auto metadata : midi)
-    {
-        const auto msg = metadata.getMessage();
-        const int eventSample = juce::jlimit(renderedUntil, buffer.getNumSamples(),
-                                             metadata.samplePosition);
-        if (eventSample > renderedUntil)
-            renderRange(buffer, renderedUntil, eventSample - renderedUntil,
-                        resonance, decay, motion, fxMode ? 1.0f : gain, grainMix, grainSize, grainDensity, grainTone,
-                        reverseGrains, freezeTexture, fxMode);
-
-        if (msg.isNoteOn())
-            noteOn(msg.getNoteNumber(), msg.getChannel(), msg.getFloatVelocity());
-        else if (msg.isNoteOff())
-            noteOff(msg.getNoteNumber(), msg.getChannel());
-        else if (msg.isController())
-        {
-            if (msg.getControllerNumber() == 64)
-            {
-                const bool newSustain = msg.getControllerValue() >= 64;
-                if (sustainDown && !newSustain)
-                {
-                    for (auto& voice : voices)
-                        if (voice.active && voice.sustained && !voice.keyDown)
-                            releaseVoice(voice);
-                }
-                sustainDown = newSustain;
-            }
-            else if (msg.getControllerNumber() == 120)
-                allNotesOff(true);
-            else if (msg.getControllerNumber() == 123)
-                allNotesOff(false);
-        }
-
-        renderedUntil = eventSample;
-    }
-
-    if (renderedUntil < buffer.getNumSamples())
-        renderRange(buffer, renderedUntil, buffer.getNumSamples() - renderedUntil,
-                    resonance, decay, motion, fxMode ? 1.0f : gain, grainMix, grainSize, grainDensity, grainTone,
-                        reverseGrains, freezeTexture, fxMode);
-
-    if (buffer.getNumChannels() > 1)
-    {
-        juce::dsp::AudioBlock<float> block(buffer);
-        juce::dsp::ProcessContextReplacing<float> context(block);
-        reverbParams.wetLevel = space * 0.78f;
-        reverbParams.dryLevel = 1.0f - space * 0.32f;
-        reverb.setParameters(reverbParams);
-        reverb.process(context);
-    }
-    if (fxMode)
-    {
-        const float wetGain = dryWet * gain;
-        const float dryGain = 1.0f - dryWet;
-        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
-        {
-            buffer.applyGain(ch, 0, n, wetGain);
-            buffer.addFrom(ch, 0, dryBuffer, ch, 0, n, dryGain);
-        }
-    }
-}
-
-juce::AudioProcessorEditor* WraithAudioProcessor::createEditor()
-{
-    return new WraithAudioProcessorEditor(*this);
-}
-
-void WraithAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
-{
-    auto state = parameters.copyState();
-    std::unique_ptr<juce::XmlElement> xml(state.createXml());
-    copyXmlToBinary(*xml, destData);
-}
-
-void WraithAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
-{
-    std::unique_ptr<juce::XmlElement> xml(getXmlFromBinary(data, sizeInBytes));
-    if (xml && xml->hasTagName(parameters.state.getType()))
-        parameters.replaceState(juce::ValueTree::fromXml(*xml));
-}
-
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
-{
-    return new WraithAudioProcessor();
-}
+juce::AudioProcessorEditor* WraithAudioProcessor::createEditor(){return new WraithAudioProcessorEditor(*this);}
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter(){return new WraithAudioProcessor();}
