@@ -45,6 +45,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout WraithAudioProcessor::create
         juce::NormalisableRange<float>(-24.0f, 12.0f, 0.1f), 0.0f));
     layout.add(std::make_unique<juce::AudioParameterFloat>("dryWet", "Dry / Wet",
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.65f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("resonatorMix", "Resonator Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.75f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("synthMix", "Synth Mix", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
     return layout;
 }
 
@@ -110,14 +112,14 @@ void WraithAudioProcessor::noteOn(int note, int channel, float velocity)
     }
 
     int slot = -1;
-    for (int i = 0; i < maxVoices; ++i)
+    for (int i = (JucePlugin_IsSynth ? 0 : 1); i < maxVoices; ++i)
         if (!voices[static_cast<size_t>(i)].active) { slot = i; break; }
 
     if (slot < 0)
     {
         // Prefer stealing the oldest released voice; otherwise steal the oldest voice.
         uint64_t oldest = UINT64_MAX;
-        for (int i = 0; i < maxVoices; ++i)
+        for (int i = (JucePlugin_IsSynth ? 0 : 1); i < maxVoices; ++i)
         {
             const auto& v = voices[static_cast<size_t>(i)];
             if (!v.keyDown && v.age < oldest) { oldest = v.age; slot = i; }
@@ -125,7 +127,7 @@ void WraithAudioProcessor::noteOn(int note, int channel, float velocity)
         if (slot < 0)
         {
             oldest = UINT64_MAX;
-            for (int i = 0; i < maxVoices; ++i)
+            for (int i = (JucePlugin_IsSynth ? 0 : 1); i < maxVoices; ++i)
                 if (voices[static_cast<size_t>(i)].age < oldest)
                 {
                     oldest = voices[static_cast<size_t>(i)].age;
@@ -165,7 +167,7 @@ void WraithAudioProcessor::noteOff(int note, int channel)
 {
     for (auto& voice : voices)
     {
-        if (!voice.active || voice.note != note || voice.channel != channel || !voice.keyDown)
+        if ((! JucePlugin_IsSynth && &voice == &voices[0]) || !voice.active || voice.note != note || voice.channel != channel || !voice.keyDown)
             continue;
 
         voice.keyDown = false;
@@ -181,7 +183,7 @@ void WraithAudioProcessor::allNotesOff(bool immediate)
     sustainDown = false;
     for (auto& voice : voices)
     {
-        if (!voice.active) continue;
+        if ((! JucePlugin_IsSynth && &voice == &voices[0]) || !voice.active) continue;
         voice.keyDown = false;
         voice.sustained = false;
         if (immediate)
@@ -317,6 +319,10 @@ void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& buffer, int sta
     auto* right = channels > 1 ? buffer.getWritePointer(1) : nullptr;
     const double grainInterval = currentSampleRate / static_cast<double>(juce::jmax(0.1f, grainDensity));
     const float softWeight = 1.0f - grainTone;
+    const float resonatorMix = parameters.getRawParameterValue("resonatorMix")->load();
+    const float synthMix = parameters.getRawParameterValue("synthMix")->load();
+    const float ringSeconds = juce::jlimit(0.08f, 12.0f, decay);
+    const float feedback = std::exp(-6.907755f / (ringSeconds * static_cast<float>(currentSampleRate)));
 
     for (int s = start; s < start + count; ++s)
     {
@@ -404,9 +410,38 @@ void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& buffer, int sta
                 }
             }
 
+            // Audio-excited modal resonators. Each MIDI voice has 4 tuned partials.
+            // Channel state is independent; the incoming signal is the excitation.
+            if (fxMode && &v != &voices[0] && resonatorMix > 0.0001f)
+            {
+                constexpr float partials[4] = { 1.0f, 2.0f, 3.01f, 4.02f };
+                float modalL = 0.0f, modalR = 0.0f;
+                for (int harmonic = 0; harmonic < 4; ++harmonic)
+                {
+                    const float freq = hz * partials[harmonic];
+                    if (freq >= 0.45f * static_cast<float>(currentSampleRate)) continue;
+                    const float omega = twoPi * freq / static_cast<float>(currentSampleRate);
+                    const float a = 2.0f * feedback * std::cos(omega);
+                    const float b = feedback * feedback;
+                    const float weight = 1.0f / static_cast<float>(harmonic + 1);
+                    for (int ch = 0; ch < 2; ++ch)
+                    {
+                        auto& state = v.modes[static_cast<size_t>(ch)][static_cast<size_t>(harmonic)];
+                        const float input = dryBuffer.getSample(juce::jmin(ch, dryBuffer.getNumChannels() - 1), s);
+                        const float next = a * state.y1 - b * state.y2 + input * (1.0f - feedback) * 2.0f;
+                        state.y2 = state.y1;
+                        state.y1 = next;
+                        if (ch == 0) modalL += next * weight;
+                        else modalR += next * weight;
+                    }
+                }
+                const float modalGain = resonatorMix * resonance * v.velocity * v.envelope * 1.8f;
+                l += modalL * modalGain;
+                r += modalR * modalGain;
+            }
             const float grainLevel = grainMix * (fxMode ? 0.75f : 0.30f) * v.envelope * v.velocity;
-            l += (fxMode ? 0.0f : resonant) * std::sqrt(1.0f - pan) * (1.0f - grainMix * 0.35f) + grainLeft * grainLevel;
-            r += (fxMode ? 0.0f : resonant) * std::sqrt(pan) * (1.0f - grainMix * 0.35f) + grainRight * grainLevel;
+            l += (fxMode ? (&v == &voices[0] ? 0.0f : resonant * synthMix) : resonant) * std::sqrt(1.0f - pan) * (1.0f - grainMix * 0.35f) + grainLeft * grainLevel;
+            r += (fxMode ? (&v == &voices[0] ? 0.0f : resonant * synthMix) : resonant) * std::sqrt(pan) * (1.0f - grainMix * 0.35f) + grainRight * grainLevel;
 
             if (v.keyDown)
                 v.envelope += (1.0f - v.envelope) * 0.0025f;
@@ -469,7 +504,6 @@ void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
                         resonance, decay, motion, fxMode ? 1.0f : gain, grainMix, grainSize, grainDensity, grainTone,
                         reverseGrains, freezeTexture, fxMode);
 
-        if (fxMode) { renderedUntil = eventSample; continue; }
         if (msg.isNoteOn())
             noteOn(msg.getNoteNumber(), msg.getChannel(), msg.getFloatVelocity());
         else if (msg.isNoteOff())

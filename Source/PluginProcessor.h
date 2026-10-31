@@ -52,8 +52,10 @@ private:
         bool active = false;
     };
 
+    struct ModeState { float y1 = 0.0f, y2 = 0.0f; };
     struct Voice
     {
+        std::array<std::array<ModeState, 4>, 2> modes {};
         int note = -1;
         int channel = 1;
         float phase = 0.0f;

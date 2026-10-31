@@ -3,13 +3,13 @@
 WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p)
 {
-    setSize(790, 580);
+    setSize(790, 685);
     title.setText("WRAITH", juce::dontSendNotification);
     title.setFont(juce::Font(juce::FontOptions(31.0f, juce::Font::bold)));
     title.setColour(juce::Label::textColourId, juce::Colour(0xffe1d6ff));
     addAndMakeVisible(title);
 
-    subtitle.setText(JucePlugin_IsSynth ? "POLYPHONIC MIDI INSTRUMENT / 0.6" : "LIVE INPUT GRANULAR FX / 0.6", juce::dontSendNotification);
+    subtitle.setText(JucePlugin_IsSynth ? "POLYPHONIC MIDI INSTRUMENT / 0.7" : "MIDI-CONTROLLED RESONATOR FX / 0.7", juce::dontSendNotification);
     subtitle.setFont(juce::Font(juce::FontOptions(11.0f)));
     subtitle.setColour(juce::Label::textColourId, juce::Colour(0xffaaa8bd));
     addAndMakeVisible(subtitle);
@@ -24,6 +24,10 @@ WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p)
     styleSlider(grainTone, "Grain Tone");
     styleSlider(output, "Output");
     styleSlider(dryWet, "Dry / Wet");
+    styleSlider(resonatorMix, "Resonator Mix");
+    styleSlider(synthMix, "Synth Mix");
+    resonatorMix.setVisible(! JucePlugin_IsSynth);
+    synthMix.setVisible(! JucePlugin_IsSynth);
     dryWet.setVisible(! JucePlugin_IsSynth);
 
     auto& state = processor.parameters;
@@ -37,6 +41,8 @@ WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p)
     grainToneAttachment = std::make_unique<Attachment>(state, "grainTone", grainTone);
     outputAttachment = std::make_unique<Attachment>(state, "output", output);
     dryWetAttachment = std::make_unique<Attachment>(state, "dryWet", dryWet);
+    resonatorMixAttachment = std::make_unique<Attachment>(state, "resonatorMix", resonatorMix);
+    synthMixAttachment = std::make_unique<Attachment>(state, "synthMix", synthMix);
 
     for (auto* button : { &reverseButton, &freezeButton })
     {
@@ -70,8 +76,12 @@ void WraithAudioProcessorEditor::paint(juce::Graphics& g)
     g.drawLine(22.0f, 76.0f, 768.0f, 76.0f, 1.0f);
     g.setColour(juce::Colour(0xffaaa8bd));
     g.setFont(12.0f);
-    g.drawText("16-VOICE MIDI  •  LIVE AUDIO CAPTURE  •  REVERSE GRAINS  •  FREEZE TEXTURE",
-               24, 530, 740, 20, juce::Justification::centredLeft);
+    g.drawText("MIDI-TUNED AUDIO RESONATORS  /  GRANULAR  /  HYBRID SYNTH", 24, 648, 740, 20, juce::Justification::centredLeft);
+    g.setColour(juce::Colour(0xff8b7bd0));
+    g.setColour(juce::Colour(0xffded6f7));
+    for (auto* slider : { &resonance, &decay, &space, &motion, &output, &grainMix, &grainSize, &grainDensity, &grainTone, &dryWet, &resonatorMix, &synthMix })
+        if (slider->isVisible())
+            g.drawText(slider->getName(), slider->getX(), slider->getY() - 17, slider->getWidth(), 18, juce::Justification::centred);
     g.setColour(juce::Colour(0xff8b7bd0));
     g.drawText("RESONATOR", 24, 82, 300, 16, juce::Justification::centredLeft);
     g.drawText("CAPTURED INPUT TEXTURE", 24, 282, 300, 16, juce::Justification::centredLeft);
@@ -89,7 +99,9 @@ void WraithAudioProcessorEditor::resized()
     const int bottomW = 170, bottomGap = 18;
     for (int i = 0; i < 4; ++i)
         bottomRow[i]->setBounds(28 + i * (bottomW + bottomGap), 300, bottomW, 150);
-    dryWet.setBounds(560, 444, 170, 110);
-    reverseButton.setBounds(42, 464, 170, 28);
-    freezeButton.setBounds(238, 464, 170, 28);
+    dryWet.setBounds(520, 464, 155, 135);
+    resonatorMix.setBounds(24, 506, 150, 125);
+    synthMix.setBounds(188, 506, 150, 125);
+    reverseButton.setBounds(42, 455, 170, 28);
+    freezeButton.setBounds(238, 455, 170, 28);
 }
