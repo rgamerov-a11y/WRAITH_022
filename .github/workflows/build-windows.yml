@@ -20,7 +20,7 @@ jobs:
         run: cmake -S . -B build -G "Visual Studio 18 2026" -A x64
 
       - name: Build both VST3 plugins
-        run: cmake --build build --config Release --target WRAITH_Instrument_VST3 WRAITH_FX_VST3 --parallel 4
+        run: cmake --build build --config Release --target WRAITH_FX_VST3 --parallel 4
 
       - name: Package VST3 plugins
         shell: pwsh
