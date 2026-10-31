@@ -16,7 +16,7 @@ public:
 
     juce::AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override { return true; }
-    const juce::String getName() const override { return "WRAITH"; }
+    const juce::String getName() const override { return JucePlugin_IsSynth ? "WRAITH Instrument" : "WRAITH FX"; }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
@@ -78,9 +78,9 @@ private:
     void releaseVoice(Voice& voice);
     void allNotesOff(bool immediate);
     void renderRange(juce::AudioBuffer<float>& buffer, int start, int count,
-                 float resonance, float decay, float motion, float gain,
-                 float grainMix, float grainSize, float grainDensity, float grainTone,
-                 bool reverseGrains, bool freezeTexture);
+                     float resonance, float decay, float motion, float gain,
+                     float grainMix, float grainSize, float grainDensity, float grainTone,
+                     bool reverseGrains, bool freezeTexture, bool fxMode);
     void spawnGrain(Voice& voice, float grainSize, float grainTone, bool reverse, bool freeze);
     void createGrainSource();
     void captureInputAudio(juce::AudioBuffer<float>& buffer, bool freeze);
@@ -97,6 +97,7 @@ private:
     uint64_t captureWriteCounter = 0;
     uint64_t frozenEndCounter = 0;
     bool previousFreezeState = false;
+    juce::AudioBuffer<float> dryBuffer;
     juce::dsp::Reverb reverb;
     juce::dsp::Reverb::Parameters reverbParams;
 

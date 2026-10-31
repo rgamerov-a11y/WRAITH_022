@@ -3,13 +3,13 @@
 WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p)
 {
-    setSize(790, 560);
+    setSize(790, 580);
     title.setText("WRAITH", juce::dontSendNotification);
     title.setFont(juce::Font(juce::FontOptions(31.0f, juce::Font::bold)));
     title.setColour(juce::Label::textColourId, juce::Colour(0xffe1d6ff));
     addAndMakeVisible(title);
 
-    subtitle.setText("LIVE INPUT GRANULAR RESONATOR  /  SOURCE 0.5", juce::dontSendNotification);
+    subtitle.setText(JucePlugin_IsSynth ? "POLYPHONIC MIDI INSTRUMENT / 0.6" : "LIVE INPUT GRANULAR FX / 0.6", juce::dontSendNotification);
     subtitle.setFont(juce::Font(juce::FontOptions(11.0f)));
     subtitle.setColour(juce::Label::textColourId, juce::Colour(0xffaaa8bd));
     addAndMakeVisible(subtitle);
@@ -23,6 +23,8 @@ WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p)
     styleSlider(grainDensity, "Grain Density");
     styleSlider(grainTone, "Grain Tone");
     styleSlider(output, "Output");
+    styleSlider(dryWet, "Dry / Wet");
+    dryWet.setVisible(! JucePlugin_IsSynth);
 
     auto& state = processor.parameters;
     resonanceAttachment = std::make_unique<Attachment>(state, "resonance", resonance);
@@ -34,6 +36,7 @@ WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p)
     grainDensityAttachment = std::make_unique<Attachment>(state, "grainDensity", grainDensity);
     grainToneAttachment = std::make_unique<Attachment>(state, "grainTone", grainTone);
     outputAttachment = std::make_unique<Attachment>(state, "output", output);
+    dryWetAttachment = std::make_unique<Attachment>(state, "dryWet", dryWet);
 
     for (auto* button : { &reverseButton, &freezeButton })
     {
@@ -86,6 +89,7 @@ void WraithAudioProcessorEditor::resized()
     const int bottomW = 170, bottomGap = 18;
     for (int i = 0; i < 4; ++i)
         bottomRow[i]->setBounds(28 + i * (bottomW + bottomGap), 300, bottomW, 150);
+    dryWet.setBounds(560, 444, 170, 110);
     reverseButton.setBounds(42, 464, 170, 28);
     freezeButton.setBounds(238, 464, 170, 28);
 }

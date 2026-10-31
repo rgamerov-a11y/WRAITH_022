@@ -12,13 +12,13 @@ public:
 
 private:
     WraithAudioProcessor& processor;
-    juce::Slider resonance, decay, space, motion, grainMix, grainSize, grainDensity, grainTone, output;
+    juce::Slider resonance, decay, space, motion, grainMix, grainSize, grainDensity, grainTone, output, dryWet;
     juce::ToggleButton reverseButton { "Reverse Grains" }, freezeButton { "Freeze Texture" };
     juce::Label title, subtitle, footer;
     using Attachment = juce::AudioProcessorValueTreeState::SliderAttachment;
     std::unique_ptr<Attachment> resonanceAttachment, decayAttachment, spaceAttachment,
         motionAttachment, grainMixAttachment, grainSizeAttachment, grainDensityAttachment,
-        grainToneAttachment, outputAttachment;
+        grainToneAttachment, outputAttachment, dryWetAttachment;
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
     std::unique_ptr<ButtonAttachment> reverseAttachment, freezeAttachment;
 

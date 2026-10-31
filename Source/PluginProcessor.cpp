@@ -13,7 +13,7 @@ namespace
 
 WraithAudioProcessor::WraithAudioProcessor()
     : AudioProcessor(BusesProperties()
-          .withInput("Input", juce::AudioChannelSet::stereo(), true)
+          .withInput("Input", juce::AudioChannelSet::stereo(), ! JucePlugin_IsSynth)
           .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       parameters(*this, nullptr, "WRAITH_STATE", createParameterLayout())
 {
@@ -42,7 +42,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout WraithAudioProcessor::create
     layout.add(std::make_unique<juce::AudioParameterBool>("reverse", "Reverse Grains", false));
     layout.add(std::make_unique<juce::AudioParameterBool>("freeze", "Freeze Texture", false));
     layout.add(std::make_unique<juce::AudioParameterFloat>("output", "Output",
-        juce::NormalisableRange<float>(-24.0f, 6.0f, 0.1f), -8.0f));
+        juce::NormalisableRange<float>(-24.0f, 12.0f, 0.1f), 0.0f));
+    layout.add(std::make_unique<juce::AudioParameterFloat>("dryWet", "Dry / Wet",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.65f));
     return layout;
 }
 
@@ -52,6 +54,7 @@ void WraithAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     juce::dsp::ProcessSpec spec { sampleRate, static_cast<juce::uint32>(juce::jmax(1, samplesPerBlock)),
                                   static_cast<juce::uint32>(getTotalNumOutputChannels()) };
     reverb.reset();
+    dryBuffer.setSize(2, juce::jmax(1, samplesPerBlock));
     createGrainSource();
     captureCapacity = juce::jmax(1, static_cast<int>(sampleRate * 8.0));
     for (auto& channel : captureBuffer)
@@ -71,6 +74,12 @@ void WraithAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
         voice = Voice {};
     sustainDown = false;
     voiceAgeCounter = 0;
+    if (! JucePlugin_IsSynth)
+    {
+        auto& fx = voices[0];
+        fx.active = true; fx.note = 60; fx.velocity = 1.0f;
+        fx.envelope = 1.0f; fx.keyDown = true;
+    }
 }
 
 void WraithAudioProcessor::releaseResources()
@@ -85,7 +94,7 @@ bool WraithAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) co
     const bool outputOK = output == juce::AudioChannelSet::stereo() || output == juce::AudioChannelSet::mono();
     const bool inputOK = input.isDisabled() || input == juce::AudioChannelSet::stereo()
                          || input == juce::AudioChannelSet::mono();
-    return outputOK && inputOK;
+    return outputOK && (JucePlugin_IsSynth ? input.isDisabled() : (input == output));
 }
 
 void WraithAudioProcessor::noteOn(int note, int channel, float velocity)
@@ -280,6 +289,7 @@ void WraithAudioProcessor::spawnGrain(Voice& voice, float grainSize, float grain
     const bool haveCapture = available > static_cast<uint64_t>(grain.length + 8)
                              && captureCapacity > 0;
     grain.capturedAudio = haveCapture;
+    if (! JucePlugin_IsSynth && ! haveCapture) { grain.active = false; return; }
 
     if (haveCapture)
     {
@@ -300,7 +310,7 @@ void WraithAudioProcessor::spawnGrain(Voice& voice, float grainSize, float grain
 void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& buffer, int start, int count,
                                        float resonance, float decay, float motion, float gain,
                                        float grainMix, float grainSize, float grainDensity, float grainTone,
-                                       bool reverseGrains, bool freezeTexture)
+                                       bool reverseGrains, bool freezeTexture, bool fxMode)
 {
     const int channels = buffer.getNumChannels();
     auto* left = buffer.getWritePointer(0);
@@ -394,9 +404,9 @@ void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& buffer, int sta
                 }
             }
 
-            const float grainLevel = grainMix * 0.16f * v.envelope * v.velocity;
-            l += resonant * std::sqrt(1.0f - pan) * (1.0f - grainMix * 0.35f) + grainLeft * grainLevel;
-            r += resonant * std::sqrt(pan) * (1.0f - grainMix * 0.35f) + grainRight * grainLevel;
+            const float grainLevel = grainMix * (fxMode ? 0.75f : 0.30f) * v.envelope * v.velocity;
+            l += (fxMode ? 0.0f : resonant) * std::sqrt(1.0f - pan) * (1.0f - grainMix * 0.35f) + grainLeft * grainLevel;
+            r += (fxMode ? 0.0f : resonant) * std::sqrt(pan) * (1.0f - grainMix * 0.35f) + grainRight * grainLevel;
 
             if (v.keyDown)
                 v.envelope += (1.0f - v.envelope) * 0.0025f;
@@ -425,7 +435,15 @@ void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 {
     juce::ScopedNoDenormals noDenormals;
     const bool freezeTexture = parameters.getRawParameterValue("freeze")->load() >= 0.5f;
-    captureInputAudio(buffer, freezeTexture);
+    const bool fxMode = ! JucePlugin_IsSynth;
+    const int n = buffer.getNumSamples();
+    if (fxMode)
+    {
+        jassert(dryBuffer.getNumSamples() >= n);
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+            dryBuffer.copyFrom(ch, 0, buffer, ch, 0, n);
+    }
+    if (fxMode) captureInputAudio(buffer, freezeTexture);
     buffer.clear();
 
     const bool reverseGrains = parameters.getRawParameterValue("reverse")->load() >= 0.5f;
@@ -437,6 +455,7 @@ void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     const float grainSize = parameters.getRawParameterValue("grainSize")->load();
     const float grainDensity = parameters.getRawParameterValue("grainDensity")->load();
     const float grainTone = parameters.getRawParameterValue("grainTone")->load();
+    const float dryWet = parameters.getRawParameterValue("dryWet")->load();
     const float gain = juce::Decibels::decibelsToGain(parameters.getRawParameterValue("output")->load());
 
     int renderedUntil = 0;
@@ -447,9 +466,10 @@ void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
                                              metadata.samplePosition);
         if (eventSample > renderedUntil)
             renderRange(buffer, renderedUntil, eventSample - renderedUntil,
-                        resonance, decay, motion, gain, grainMix, grainSize, grainDensity, grainTone,
-                        reverseGrains, freezeTexture);
+                        resonance, decay, motion, fxMode ? 1.0f : gain, grainMix, grainSize, grainDensity, grainTone,
+                        reverseGrains, freezeTexture, fxMode);
 
+        if (fxMode) { renderedUntil = eventSample; continue; }
         if (msg.isNoteOn())
             noteOn(msg.getNoteNumber(), msg.getChannel(), msg.getFloatVelocity());
         else if (msg.isNoteOff())
@@ -478,8 +498,8 @@ void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 
     if (renderedUntil < buffer.getNumSamples())
         renderRange(buffer, renderedUntil, buffer.getNumSamples() - renderedUntil,
-                    resonance, decay, motion, gain, grainMix, grainSize, grainDensity, grainTone,
-                        reverseGrains, freezeTexture);
+                    resonance, decay, motion, fxMode ? 1.0f : gain, grainMix, grainSize, grainDensity, grainTone,
+                        reverseGrains, freezeTexture, fxMode);
 
     if (buffer.getNumChannels() > 1)
     {
@@ -489,6 +509,16 @@ void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
         reverbParams.dryLevel = 1.0f - space * 0.32f;
         reverb.setParameters(reverbParams);
         reverb.process(context);
+    }
+    if (fxMode)
+    {
+        const float wetGain = dryWet * gain;
+        const float dryGain = 1.0f - dryWet;
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        {
+            buffer.applyGain(ch, 0, n, wetGain);
+            buffer.addFrom(ch, 0, dryBuffer, ch, 0, n, dryGain);
+        }
     }
 }
 
