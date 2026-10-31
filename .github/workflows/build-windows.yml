@@ -20,21 +20,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure project
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      
+- name: Package WRAITH 0.6 VST3
+  shell: pwsh
+  run: |
+    $plugins = @(Get-ChildItem -Path build -Recurse -Directory -Filter "*.vst3")
 
-      - name: Build VST3
-        run: cmake --build build --config Release --target WRAITH_Instrument_VST3 WRAITH_FX_VST3 --parallel 4
-      - name: Package VST3
-        shell: pwsh
-        run: |
-          $plugin = Get-ChildItem build -Recurse -Directory -Filter 'WRAITH.vst3' |
-            Select-Object -First 1
-          if ($null -eq $plugin) {
-            throw "WRAITH.vst3 not found after build"
-          }
-          Compress-Archive -Path $plugin.FullName `
-            -DestinationPath "WRAITH-0.5-VST3-Windows-x64.zip" -Force
+    if ($plugins.Count -lt 2) {
+      throw "Expected 2 VST3 plugins, found $($plugins.Count)"
+    }
+
+    New-Item -ItemType Directory -Path package -Force | Out-Null
+
+    foreach ($plugin in $plugins) {
+      Copy-Item -LiteralPath $plugin.FullName -Destination package -Recurse -Force
+      Write-Host "Packaged: $($plugin.Name)"
+    }
+
+    Compress-Archive -Path "package/*" `
+      -DestinationPath "WRAITH-0.6-VST3-Windows-x64.zip" -Force
+
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
