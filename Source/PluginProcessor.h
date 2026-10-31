@@ -1,6 +1,7 @@
 #pragma once
 #include <JuceHeader.h>
 #include <array>
+#include <atomic>
 #include <vector>
 
 class WraithAudioProcessor final : public juce::AudioProcessor
@@ -29,6 +30,9 @@ public:
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*, int) override;
 
+    std::atomic<int> visualNote { 60 };
+    std::atomic<float> visualVelocity { 0.0f };
+    std::atomic<unsigned int> visualTrigger { 0 };
     juce::AudioProcessorValueTreeState parameters;
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
@@ -61,7 +65,6 @@ private:
         float phase = 0.0f;
         float currentHz = 0.0f;
         float targetHz = 0.0f;
-        bool resonanceLatched = false;
         float phaseB = 0.0f;
         float phaseC = 0.0f;
         float envelope = 0.0f;
@@ -102,7 +105,6 @@ private:
     uint64_t captureWriteCounter = 0;
     uint64_t frozenEndCounter = 0;
     bool previousFreezeState = false;
-    bool previousResonanceFreeze = false;
     float lastPlayedHz = 0.0f;
     juce::AudioBuffer<float> dryBuffer;
     juce::dsp::Reverb reverb;

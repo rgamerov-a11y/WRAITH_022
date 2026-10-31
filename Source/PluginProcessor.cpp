@@ -50,7 +50,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout WraithAudioProcessor::create
     layout.add(std::make_unique<juce::AudioParameterFloat>("character", "Character", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.0f));
     layout.add(std::make_unique<juce::AudioParameterFloat>("harmonics", "Harmonics", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.65f));
     layout.add(std::make_unique<juce::AudioParameterFloat>("damping", "Damping", juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.4f));
-    layout.add(std::make_unique<juce::AudioParameterBool>("resonanceFreeze", "Resonance Freeze", false));
     layout.add(std::make_unique<juce::AudioParameterFloat>("glide", "Glide (ms)", juce::NormalisableRange<float>(0.0f, 500.0f, 1.0f), 0.0f));
     return layout;
 }
@@ -69,7 +68,6 @@ void WraithAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     captureWriteCounter = 0;
     frozenEndCounter = 0;
     previousFreezeState = false;
-    previousResonanceFreeze = false;
     lastPlayedHz = 0.0f;
     reverbParams.roomSize = 0.92f;
     reverbParams.damping = 0.38f;
@@ -108,6 +106,9 @@ bool WraithAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) co
 
 void WraithAudioProcessor::noteOn(int note, int channel, float velocity)
 {
+    visualNote.store(note, std::memory_order_relaxed);
+    visualVelocity.store(velocity, std::memory_order_relaxed);
+    visualTrigger.fetch_add(1, std::memory_order_relaxed);
     // Retrigger the same held note on the same MIDI channel rather than stacking duplicates.
     for (auto& voice : voices)
     {
@@ -181,9 +182,7 @@ void WraithAudioProcessor::noteOff(int note, int channel)
             continue;
 
         voice.keyDown = false;
-        if (voice.resonanceLatched)
-            voice.sustained = true;
-        else if (sustainDown)
+        if (sustainDown)
             voice.sustained = true;
         else
             releaseVoice(voice);
@@ -336,7 +335,6 @@ void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& buffer, int sta
     const float character = parameters.getRawParameterValue("character")->load();
     const float harmonics = parameters.getRawParameterValue("harmonics")->load();
     const float damping = parameters.getRawParameterValue("damping")->load();
-    const bool resonanceFreeze = parameters.getRawParameterValue("resonanceFreeze")->load() >= 0.5f;
     const float glideMs = parameters.getRawParameterValue("glide")->load();
     const float glideCoefficient = glideMs <= 0.0f ? 0.0f : std::exp(-1.0f / (0.001f * glideMs * static_cast<float>(currentSampleRate)));
     const float stringsWeight = juce::jlimit(0.0f, 1.0f, 1.0f - character * 2.0f);
@@ -456,8 +454,8 @@ void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& buffer, int sta
                     {
                         auto& state = v.modes[static_cast<size_t>(ch)][static_cast<size_t>(harmonic)];
                         const float input = dryBuffer.getSample(juce::jmin(ch, dryBuffer.getNumChannels() - 1), s);
-                        const float excitation = (resonanceFreeze && v.resonanceLatched) ? 0.0f : input;
-                        const float modeFeedback = (resonanceFreeze && v.resonanceLatched) ? 0.999995f : partialFeedback;
+                        const float excitation = input;
+                        const float modeFeedback = partialFeedback;
                         const float modeA = 2.0f * modeFeedback * std::cos(omega);
                         const float modeB = modeFeedback * modeFeedback;
                         const float next = modeA * state.y1 - modeB * state.y2 + excitation * (1.0f - partialFeedback) * 2.0f;
@@ -502,23 +500,6 @@ void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 {
     juce::ScopedNoDenormals noDenormals;
     const bool freezeTexture = parameters.getRawParameterValue("freeze")->load() >= 0.5f;
-    const bool resonanceFreeze = parameters.getRawParameterValue("resonanceFreeze")->load() >= 0.5f;
-    if (resonanceFreeze && !previousResonanceFreeze)
-    {
-        for (auto& v : voices)
-            if (v.active && v.note >= 0 && v.keyDown && (&v != &voices[0] || JucePlugin_IsSynth))
-                v.resonanceLatched = true;
-    }
-    else if (!resonanceFreeze && previousResonanceFreeze)
-    {
-        for (auto& v : voices)
-            if (v.resonanceLatched)
-            {
-                v.resonanceLatched = false;
-                if (!v.keyDown && !sustainDown) releaseVoice(v);
-            }
-    }
-    previousResonanceFreeze = resonanceFreeze;
     const bool fxMode = ! JucePlugin_IsSynth;
     const int n = buffer.getNumSamples();
     if (fxMode)
