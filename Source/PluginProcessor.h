@@ -45,10 +45,12 @@ private:
     bool sustainDown=false;
     double currentSampleRate=44100.0;
     float lastPlayedHz=0.0f;
-    juce::AudioBuffer<float> dryBuffer;
+    juce::AudioBuffer<float> dryBuffer, spaceBuffer;
+    std::array<float,2> spaceHighpassState {{0,0}};
     juce::dsp::Reverb reverb;
     std::array<float,2> motionPhase {{0,0}};
     std::array<float,2> toneLP {{0,0}};
+    float resonanceEnergy=0.0f;
     juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> characterSmooth;
     juce::dsp::Reverb::Parameters reverbParams;
     std::array<juce::dsp::StateVariableTPTFilter<float>,2> filter;

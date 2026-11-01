@@ -33,7 +33,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout WraithAudioProcessor::create
  return p;
 }
 void WraithAudioProcessor::prepareToPlay(double sr,int block) {
- currentSampleRate=sr; dryBuffer.setSize(2,juce::jmax(1,block));
+ currentSampleRate=sr; dryBuffer.setSize(2,juce::jmax(1,block)); spaceBuffer.setSize(2,juce::jmax(1,block)); spaceHighpassState={0,0}; resonanceEnergy=0.0f;
  juce::dsp::ProcessSpec spec{sr,static_cast<juce::uint32>(juce::jmax(1,block)),2};
  reverb.reset(); reverb.prepare(spec);
  reverbParams.roomSize=.92f; reverbParams.damping=.38f; reverbParams.width=1; reverbParams.wetLevel=.3f; reverbParams.dryLevel=.8f; reverb.setParameters(reverbParams);
@@ -187,7 +187,7 @@ void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& b,int start,int
        const float fb=juce::jmin(.999995f,std::exp(-6.907755f/(modeDecay*sr)));
        // Excitation point controls the harmonic nodes of a virtual string/plate.
        const float posShape=.12f+.88f*std::abs(std::sin(juce::MathConstants<float>::pi*(k+1)*(.06f+.88f*position)));
-       const float cloudAir=1.0f-cloud*(k==0?.55f:(.08f+.08f*partial));
+       const float cloudAir=1.0f-cloud*(k==0?.77f:(.12f+.12f*partial));
        const float partialGain=std::pow(.42f+.56f*harmonics,static_cast<float>(k)) * posShape*(1.0f-.55f*damping*partial)*cloudAir;
        for(int ch=0;ch<b.getNumChannels();++ch){
          auto& st=v.modes[static_cast<size_t>(ch)][static_cast<size_t>(k)];
@@ -198,7 +198,7 @@ void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& b,int start,int
        }
      }
      // Cloud uses lower excitation to avoid stacking 16 sustained resonators into the saturator.
-     const float characterGain=1.5f*strings+2.15f*metal+0.85f*cloud;
+     const float characterGain=1.5f*strings+2.15f*metal+0.72f*cloud;
      const float gain=resonance*v.velocity*v.envelope*characterGain;
      l+=accum[0]*gain;r+=accum[b.getNumChannels()>1?1:0]*gain;
      if(v.keyDown)v.envelope+=(1.0f-v.envelope)*.0025f;
@@ -208,6 +208,13 @@ void WraithAudioProcessor::renderRange(juce::AudioBuffer<float>& b,int start,int
        if(v.envelope<=.00002f)v=Voice{};
      }
    }
+   // Smooth energy-dependent gain reduction: prevents sustained chords from
+   // driving the spatial stage into a dense, undifferentiated wash.
+   const float power=.5f*(l*l+r*r);
+   const float follow=power>resonanceEnergy ? .0035f : .00008f;
+   resonanceEnergy+=(power-resonanceEnergy)*follow;
+   const float dynamicGain=1.0f/std::sqrt(1.0f+resonanceEnergy*(2.0f+5.0f*cloud));
+   l*=dynamicGain; r*=dynamicGain;
    // Soft saturation increases density without hard clipping.
    const float drive=1.15f+.65f*metal-.35f*cloud;
    const float softL=std::tanh(l*drive)*.83f;
@@ -245,13 +252,33 @@ void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBu
    rendered=at;
  }
  if(rendered<n)renderRange(b,rendered,n-rendered,resonance,decay,character,harmonics,damping,glide,position,tone,motion,time);
+ // Keep the direct resonator separate from the spatial return.
+ // The high-pass applies ONLY to the reverb feed, so bass fundamentals stay intact.
  if(channels>1){
-   juce::dsp::AudioBlock<float> block(b);juce::dsp::ProcessContextReplacing<float> ctx(block);
-   reverbParams.roomSize=juce::jlimit(.15f,.99f,.20f+.78f*time);
-   reverbParams.damping=juce::jlimit(0.0f,1.0f,.55f-.30f*tone);
-   reverbParams.width=juce::jlimit(0.0f,1.0f,.35f+.65f*raw("space"));
-   reverbParams.wetLevel=raw("space")*.65f;reverbParams.dryLevel=1.0f-raw("space")*.20f;
-   reverb.setParameters(reverbParams);reverb.process(ctx);
+   const float space=raw("space");
+   const float hpA=1.0f-std::exp(-twoPi*(145.0f+125.0f*space)/static_cast<float>(currentSampleRate));
+   for(int ch=0;ch<channels;++ch){
+     for(int i=0;i<n;++i){
+       const float x=b.getSample(ch,i);
+       auto& low=spaceHighpassState[static_cast<size_t>(ch)];
+       low+=hpA*(x-low);
+       spaceBuffer.setSample(ch,i,x-low);
+     }
+   }
+   reverbParams.roomSize=juce::jlimit(.15f,.98f,.22f+.75f*time);
+   reverbParams.damping=juce::jlimit(0.0f,1.0f,.72f-.22f*tone);
+   reverbParams.width=juce::jlimit(0.0f,1.0f,.5f+.5f*space);
+   reverbParams.wetLevel=1.0f;
+   reverbParams.dryLevel=0.0f;
+   reverb.setParameters(reverbParams);
+   juce::dsp::AudioBlock<float> spaceBlock(spaceBuffer);
+   auto segment=spaceBlock.getSubBlock(0,static_cast<size_t>(n));
+   juce::dsp::ProcessContextReplacing<float> spaceContext(segment);
+   reverb.process(spaceContext);
+   const float returnGain=.12f+.35f*space;
+   for(int ch=0;ch<channels;++ch)
+     for(int i=0;i<n;++i)
+       b.addSample(ch,i,spaceBuffer.getSample(ch,i)*returnGain);
  }
  filterMorph.setTargetValue(raw("filterMode"));
  cutoffSmooth.setTargetValue(raw("cutoff"));
@@ -263,7 +290,7 @@ void WraithAudioProcessor::processBlock(juce::AudioBuffer<float>& b,juce::MidiBu
  for(int s=0;s<n;++s){
    const float f=filterMorph.getNextValue();
    const float cutoff=juce::jlimit(20.0f,static_cast<float>(currentSampleRate*.45),cutoffSmooth.getNextValue());
-   const float q=juce::jmap(resonanceSmooth.getNextValue(),.707f,12.0f);
+   const float q=juce::jmap(resonanceSmooth.getNextValue(),.707f,8.0f);
    const float driveDb=gainSmooth.getNextValue();
    const float drive=juce::Decibels::decibelsToGain(driveDb);
    // Continuous HP -> BP -> LP morph; all three filters track the same cutoff and Q.
