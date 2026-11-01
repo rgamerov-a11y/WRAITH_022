@@ -13,7 +13,9 @@ private:
  } thin;
  void timerCallback() override { repaint(890,310,20,95); }
  WraithAudioProcessor& processor;
- juce::Slider character,harmonics,damping,decay,glide,position,root,tone,space,time,motion,cutoff,filterResonance,filterMode,filterGain,mix,output;
+ juce::Slider reverbPlacement,character,harmonics,damping,decay,glide,position,root,tone,space,time,motion,utilityLP,utilityHP,utilityCompression,mix,output;
+ juce::TextButton resetFilter {"RESET"};
+ void resetUtility();
  using Attachment=juce::AudioProcessorValueTreeState::SliderAttachment;
  std::vector<std::unique_ptr<Attachment>> attachments;
  void rotary(juce::Slider&,const char*);

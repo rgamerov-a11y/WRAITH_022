@@ -45,9 +45,11 @@ private:
     bool sustainDown=false;
     double currentSampleRate=44100.0;
     float lastPlayedHz=0.0f;
-    juce::AudioBuffer<float> dryBuffer, spaceBuffer;
+    juce::AudioBuffer<float> dryBuffer, spaceBuffer, excitationBuffer, preBuffer;
     std::array<float,2> spaceHighpassState {{0,0}};
-    juce::dsp::Reverb reverb;
+    std::array<float,2> preHighpassState {{0,0}};
+    juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> preAmount,postAmount;
+    juce::dsp::Reverb reverb, preReverb;
     std::array<float,2> motionPhase {{0,0}};
     std::array<float,2> toneLP {{0,0}};
     float resonanceEnergy=0.0f;
@@ -57,6 +59,8 @@ private:
     std::array<juce::dsp::StateVariableTPTFilter<float>,2> filterLow,filterHigh;
     juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> cutoffSmooth,resonanceSmooth,gainSmooth;
     juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> filterMorph;
+    juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> lpSmooth,hpSmooth,compressionSmooth;
+    std::array<float,2> compressorEnvelope {{0.0f,0.0f}};
     juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> wetSmooth;
     juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> outputSmooth;
     void noteOn(int,int,float);
