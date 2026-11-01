@@ -52,6 +52,8 @@ private:
     juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> characterSmooth;
     juce::dsp::Reverb::Parameters reverbParams;
     std::array<juce::dsp::StateVariableTPTFilter<float>,2> filter;
+    std::array<juce::dsp::StateVariableTPTFilter<float>,2> filterLow,filterHigh;
+    juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> cutoffSmooth,resonanceSmooth,gainSmooth;
     juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> filterMorph;
     juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> wetSmooth;
     juce::SmoothedValue<float,juce::ValueSmoothingTypes::Linear> outputSmooth;

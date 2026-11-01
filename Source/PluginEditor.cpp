@@ -93,7 +93,7 @@ WraithAudioProcessorEditor::WraithAudioProcessorEditor(WraithAudioProcessor& p):
  rotary(harmonics,"HARMONICS","harmonics");rotary(damping,"DAMPING","damping");rotary(decay,"DECAY","decay");
  rotary(glide,"GLIDE","glide");rotary(position,"POSITION","position");rotary(root,"ROOT","root");
  rotary(tone,"TONE","tone");rotary(space,"SPACE","space");rotary(time,"TIME","time");rotary(motion,"MOTION","motion");
- rotary(filter,"FILTER","filter");rotary(mix,"MIX","dryWet");rotary(output,"OUT","output");
+ rotary(cutoff,"CUTOFF","cutoff");rotary(filterResonance,"RESONANCE","filterResonance");rotary(filterMode,"MODE","filterMode");rotary(filterGain,"GAIN","filterGain");rotary(mix,"MIX","dryWet");rotary(output,"OUT","output");
  character.setSliderStyle(juce::Slider::LinearHorizontal);character.setTextBoxStyle(juce::Slider::NoTextBox,false,0,0);
  character.setColour(juce::Slider::trackColourId,white.withAlpha(.55f));character.setColour(juce::Slider::thumbColourId,white);
  character.setColour(juce::Slider::backgroundColourId,white.withAlpha(.14f));addAndMakeVisible(character);
@@ -107,7 +107,7 @@ void WraithAudioProcessorEditor::paint(juce::Graphics& g){
  g.fillAll(bg);g.setColour(white);g.setFont(juce::Font(juce::FontOptions(27.0f)));
  g.drawText("W  R  A  I  T  H",46,20,440,44,juce::Justification::centredLeft);
  g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(11.0f)));
- g.drawText("E N H A N C E D   R E S O N A N C E    /    1.2",48,64,520,18,juce::Justification::centredLeft);
+ g.drawText("E N H A N C E D   R E S O N A N C E    /    1.3",48,64,520,18,juce::Justification::centredLeft);
  g.drawText("M I D I   R E S O N A N T   F X",880,42,280,20,juce::Justification::centredRight);
  g.setColour(white);g.setFont(juce::Font(juce::FontOptions(15.0f)));
  g.drawText("C H A R A C T E R   M O R P H",340,446,520,25,juce::Justification::centred);
@@ -116,16 +116,16 @@ void WraithAudioProcessorEditor::paint(juce::Graphics& g){
  g.drawText("M E T A L",520,524,160,20,juce::Justification::centred);
  g.drawText("C L O U D",840,524,160,20,juce::Justification::centred);
  g.setColour(white.withAlpha(.16f));g.drawLine(35.0f,566.0f,1165.0f,566.0f,.8f);
- for(float x:{540.0f,795.0f,1010.0f})g.drawLine(x,588.0f,x,730.0f,.75f);
+ for(float x:{485.0f,765.0f,1035.0f})g.drawLine(x,588.0f,x,730.0f,.75f);
  g.setColour(white.withAlpha(.85f));g.setFont(juce::Font(juce::FontOptions(12.0f)));
  g.drawText("R E S O N A T O R",42,576,245,20,juce::Justification::centredLeft);
- g.drawText("T E X T U R E",550,576,220,20,juce::Justification::centredLeft);
- g.drawText("F I L T E R",803,576,190,20,juce::Justification::centredLeft);
- g.drawText("O U T P U T",1020,576,170,20,juce::Justification::centredLeft);
+ g.drawText("T E X T U R E",495,576,220,20,juce::Justification::centredLeft);
+ g.drawText("F I L T E R",775,576,190,20,juce::Justification::centredLeft);
+ g.drawText("O U T P U T",1045,576,150,20,juce::Justification::centredLeft);
  auto label=[&](const char* name,juce::Slider& s){auto b=s.getBounds();g.setColour(muted);g.setFont(juce::Font(juce::FontOptions(10.0f)));g.drawText(name,b.getX()-12,b.getBottom()+1,b.getWidth()+24,15,juce::Justification::centred);};
  label("HARMONICS",harmonics);label("DAMPING",damping);label("DECAY",decay);label("GLIDE",glide);label("POSITION",position);
  label("ROOT",root);label("TONE",tone);label("SPACE",space);label("TIME",time);label("MOTION",motion);
- label("DARK / OPEN / THIN",filter);label("MIX",mix);label("OUT",output);
+ label("CUTOFF",cutoff);label("RESONANCE",filterResonance);label("MODE",filterMode);label("GAIN",filterGain);label("MIX",mix);label("OUT",output);
  const float level=juce::jlimit(0.0f,1.0f,processor.visualLevel.load(std::memory_order_relaxed));
  g.setColour(white.withAlpha(.14f));g.fillRect(1160,635,3,61);
  g.setColour(white.withAlpha(.85f));const int bar=juce::roundToInt(level*61);g.fillRect(1160,696-bar,3,bar);
@@ -133,9 +133,9 @@ void WraithAudioProcessorEditor::paint(juce::Graphics& g){
 void WraithAudioProcessorEditor::resized(){
  visual.setBounds(95,89,1010,345);character.setBounds(235,478,730,34);
  const auto place=[](juce::Slider& s,int x,int y){s.setBounds(x,y,65,65);};
- place(harmonics,46,612);place(damping,128,612);place(decay,210,612);place(glide,292,612);place(position,374,612);place(root,456,612);
- place(tone,555,612);place(space,622,612);place(time,689,612);place(motion,756,612);
- place(filter,862,612);place(mix,1020,612);place(output,1090,612);
+ place(harmonics,30,612);place(damping,104,612);place(decay,178,612);place(glide,252,612);place(position,326,612);place(root,400,612);
+ place(tone,488,612);place(space,555,612);place(time,622,612);place(motion,689,612);
+ place(cutoff,765,612);place(filterResonance,832,612);place(filterMode,899,612);place(filterGain,966,612);place(mix,1041,612);place(output,1110,612);
 }
 
-WraithAudioProcessorEditor::~WraithAudioProcessorEditor(){for(auto* s:{&harmonics,&damping,&decay,&glide,&position,&root,&tone,&space,&time,&motion,&filter,&mix,&output})s->setLookAndFeel(nullptr);}
+WraithAudioProcessorEditor::~WraithAudioProcessorEditor(){for(auto* s:{&harmonics,&damping,&decay,&glide,&position,&root,&tone,&space,&time,&motion,&cutoff,&filterResonance,&filterMode,&filterGain,&mix,&output})s->setLookAndFeel(nullptr);}

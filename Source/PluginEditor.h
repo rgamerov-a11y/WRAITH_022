@@ -12,7 +12,7 @@ private:
  ThinLook thin;
  void timerCallback() override {repaint(1110,630,48,85);}
  WraithAudioProcessor& processor; WraithVisual visual;
- juce::Slider character,harmonics,damping,decay,glide,position,root,tone,space,time,motion,filter,mix,output;
+ juce::Slider character,harmonics,damping,decay,glide,position,root,tone,space,time,motion,cutoff,filterResonance,filterMode,filterGain,mix,output;
  using Attachment=juce::AudioProcessorValueTreeState::SliderAttachment;
  std::vector<std::unique_ptr<Attachment>> attachments;
  void rotary(juce::Slider&,const juce::String&,const char*);
